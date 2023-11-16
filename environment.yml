@@ -1,4 +1,4 @@
-name: pyCalTrack
+name: PyCalTrack
 channels:
   - defaults
   - conda-forge
