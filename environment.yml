@@ -2,12 +2,16 @@ name: PyCalTrack
 channels:
   - defaults
   - conda-forge
+  - bioconda
 dependencies:
   - python=3.10
-  - matplotlib=3.7.2
+  - matplotlib=3.8.2
   - nd2=0.7.3
   - numpy=1.24.4
   - opencv=4.8.0
   - pandas=2.0.3
   - scipy=1.11.2
   - seaborn=0.12.2
+  - mypy=1.7.0 # for development purposes
+  - isort=5.12.0
+  - python-bioformats
