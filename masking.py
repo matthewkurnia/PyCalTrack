@@ -1,7 +1,6 @@
+import cv2
 import numpy as np
 import numpy.typing as npt
-import cv2
-from scipy.io import loadmat
 
 
 def get_mask(frames: npt.NDArray) -> npt.NDArray:

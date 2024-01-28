@@ -1,7 +1,11 @@
+import numpy as np
+from matplotlib import colormaps
 from matplotlib import pyplot as plt
+from scipy.io import loadmat
+
+from analysis import beat_segmentation, get_calcium_trace, get_parameters
 from masking import get_mask
 from reader import get_video_frames
-from matplotlib import colormaps
 
 PATH_ND2_TEST = (
     "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/"
@@ -18,8 +22,33 @@ def main() -> None:
         return
 
     mask = get_mask(frames)
-    plt.imshow(mask, cmap=colormaps["gray"])
+    # plt.imshow(mask, cmap=colormaps["gray"])
+    # plt.show()
+
+    calcium_trace = get_calcium_trace(frames, mask)
+
+    # wow this indexing is really bad
+    calcium_trace_matlab = loadmat(
+        "sample_videos/benchmark/calcium_analysis/Calcium_Traces.mat"
+    )["Calcium_Traces"][0, 0][0][:, 0]
+
+    norm = np.linalg.norm(calcium_trace * 65535 - calcium_trace_matlab)
+    print(f"|py - ml| / |ml| = {norm / np.linalg.norm(calcium_trace_matlab)}")
+
+    plt.plot(calcium_trace * 65535, label="python")
+    plt.plot(calcium_trace_matlab, label="matlab")
     plt.show()
+
+    # TODO: Based on the figure, would you like to remove any cell?
+
+    # TODO: Do you need to apply photo bleach correction?
+
+    beat_segments = beat_segmentation(calcium_trace[1:], 50, 1, 0.1)
+    print(beat_segments)
+
+    left, right = beat_segments[0]
+
+    get_parameters(calcium_trace[left:right], 50, 1)
 
 
 if __name__ == "__main__":
