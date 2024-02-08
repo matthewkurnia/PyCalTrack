@@ -6,6 +6,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.signal import find_peaks, peak_prominences
 from scipy.optimize import curve_fit
+from flags import HANDLE_LAST_TRANSIENT
 
 from utils import moving_average
 
@@ -18,6 +19,15 @@ BASELINE_INCREASE = 0.03
 
 def get_calcium_trace(frames: npt.NDArray, mask: npt.NDArray) -> npt.NDArray:
     return np.sum(frames[:, mask], axis=1)
+
+
+def _find_peak_indices(x: npt.NDArray) -> npt.NDArray:
+    peaks_raw, _ = find_peaks(x)
+    prominences, *_ = peak_prominences(x, peaks_raw)
+    indices, _ = find_peaks(
+        x, prominence=PEAK_PROMINENCE_THRESHOLD * np.max(prominences)
+    )
+    return indices
 
 
 def beat_segmentation(
@@ -39,7 +49,7 @@ def beat_segmentation(
         stride = 1
 
     pacing_period = 1 / pacing_frequency
-    cutoff = pacing_period * (1 - max_pacing_deviation)
+    cutoff_threshold = pacing_period * (1 - max_pacing_deviation)
 
     # Offset is 10% of the pacing period in number of frames.
     offset = ceil(TRACE_ONSET_DELAY * pacing_period * acquisition_frequency)
@@ -50,31 +60,22 @@ def beat_segmentation(
 
     # Find the peaks of the slope.
     # That is, when the most change occurs in the trace.
-    diff_peak_indices_raw, _ = find_peaks(diff_smoothed)
-    diff_prominences, *_ = peak_prominences(diff_smoothed, diff_peak_indices_raw)
-    diff_peak_indices, _ = find_peaks(
-        diff_smoothed, prominence=PEAK_PROMINENCE_THRESHOLD * np.max(diff_prominences)
-    )
-    # print(diff_peak_indices, diff_prominences)
+    diff_peak_indices = _find_peak_indices(diff_smoothed)
 
     # Find the peaks of the trace itself.
-    trace_peak_indices_raw, _ = find_peaks(calcium_trace)
-    trace_prominences, *_ = peak_prominences(calcium_trace, trace_peak_indices_raw)
-    trace_peak_indices, _ = find_peaks(
-        calcium_trace, prominence=PEAK_PROMINENCE_THRESHOLD * np.max(trace_prominences)
-    )
+    trace_peak_indices = _find_peak_indices(calcium_trace)
     # print(trace_peak_indices)
 
     trace_peak_periods = np.diff(trace_peak_indices / acquisition_frequency)
-    # Check if there are any periods which is less than our cutoff.
-    extra_beat_detected = np.any(trace_peak_periods < cutoff)
+    # Check if there are any periods which is less than our cutoff threshold.
+    extra_beat_detected = np.any(trace_peak_periods < cutoff_threshold)
 
     if (diff_peak_indices.size - trace_peak_indices.size) > 1:
         # Number of peaks in gradient does not match with number of peaks in value.
         # TODO: Return early here.
         return None
     elif extra_beat_detected:
-        # Period between beats less than cutoff.
+        # Period between beats less than cutoff threshold.
         # TODO: Return early here.
         return None
 
@@ -100,37 +101,22 @@ def beat_segmentation(
         beat_segments.append((start, end))
 
     # Handle last transient special cases.
-    # There are two cases. Either the last beat ends pre-maturely, or the
-    # data contains the start of the next beat, in which case it needs to be removed.
-    """
-    last_transient_onset = max(diff_peak_indices[-1] - offset, 0)
-    start = last_transient_onset * stride
-    last_transient_trace_original = calcium_trace_original[start:]
-    last_transient_trace = calcium_trace[last_transient_onset:]
-    last_transient_trace_augmented = np.append(
-        last_transient_trace, last_transient_trace[0]
-    )
-
-    last_trace_peak_indices_raw, _ = find_peaks(last_transient_trace_augmented)
-    last_trace_prominences, *_ = peak_prominences(
-        last_transient_trace_augmented, last_trace_peak_indices_raw
-    )
-    last_trace_peak_indices, _ = find_peaks(
-        last_transient_trace_augmented,
-        prominence=PEAK_PROMINENCE_THRESHOLD * np.max(last_trace_prominences),
-    )
-
-    if acquisition_frequency <= 100 and not single_beat:
-        if last_trace_peak_indices.size > 1:
-            # Multiple peaks detected. This means that trace contains start of next beat.
-            end = (last_trace_peak_indices[-1] - offset) * stride
+    if HANDLE_LAST_TRANSIENT:
+        last_transient_start = diff_peak_indices[-1] - offset
+        last_transient_end = min(
+            int(diff_peak_indices[-1] - offset + pacing_period * acquisition_frequency),
+            calcium_trace.size,
+        )
+        last_transient_period = (
+            last_transient_end - last_transient_start
+        ) / acquisition_frequency
+        if last_transient_period >= cutoff_threshold:
+            start = last_transient_start * stride
+            end = last_transient_end * stride
+            segmented_beats.append(calcium_trace_original[start:end])
             beat_segments.append((start, end))
-        elif last_transient_trace_original[0] >= last_transient_trace_original[-1]:
-            # Tail is less than or equal to the baseline. This means we can consider
-            # this beat, as we have a full beat.
-            print("B")
-            beat_segments.append((start, calcium_trace_original.size))
-    """
+        else:
+            print("Last transient ignored.")
 
     # Get number of beats.
     n_beats = len(segmented_beats)
@@ -266,9 +252,7 @@ def get_parameters(
     exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
     xs = np.arange(trace_decay.size)
     ys = trace_decay
-    plt.plot(xs, ys)
-    plt.show()
-    [a, b, c], *_ = curve_fit(exponential, xs, ys, p0=[trace_decay[0], 1, 0])
+    [_, b, _], *_ = curve_fit(exponential, xs, ys, p0=[trace_decay[0], 1, 0])
     tau = 1 / b
 
     print(
