@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
 from analysis import beat_segmentation, get_calcium_trace, get_parameters
-from masking import get_mask
+from masking import get_mask, get_mask_multi_cell, get_mask_multi_cell_v2
 from reader import get_video_frames
 
 PATH_ND2_TEST = (
@@ -14,9 +14,29 @@ PATH_ND2_TEST = (
 PATH_VSI_TEST = (
     "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/benchmark/Process_2501.vsi"
 )
+PATH_MULTICELL_TIF_TEST = "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/video1.tif"
 
 
 def main() -> None:
+    frames = get_video_frames(PATH_MULTICELL_TIF_TEST)
+    if frames is None:
+        print("AAAAAAAAAAAAAAAAAAAA")
+        return
+    f, axarr = plt.subplots(1, 2)
+    # axarr[0, 0].imshow(image_datas[0])
+    # axarr[0, 1].imshow(image_datas[1])
+    mask = get_mask_multi_cell(frames)
+    my_mask = mask / 255
+    axarr[0].imshow(mask, cmap=colormaps["gray"])
+    mask = loadmat(
+        "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/benchmark/multi_cell/ProjFgMask.mat"
+    )["ProjFgMask"]
+    axarr[1].imshow(mask, cmap=colormaps["gray"])
+    print(np.max(my_mask - mask))
+    # print(np.max(np.mean(frames, axis=0) - np.mean(mask / 65535, axis=2)))
+    plt.show()
+
+    """
     frames = get_video_frames(PATH_VSI_TEST)
     if frames is None:
         return
@@ -49,6 +69,7 @@ def main() -> None:
     left, right = beat_segments[0]
 
     get_parameters(calcium_trace[left:right], 50, 1)
+    """
 
 
 if __name__ == "__main__":

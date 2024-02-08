@@ -1,6 +1,7 @@
 import pathlib
 from typing import Union
 
+from PIL import Image, ImageSequence
 import bioformats as bf
 import cv2
 import javabridge
@@ -30,6 +31,18 @@ def _get_video_frames_vsi(path: str) -> Union[npt.NDArray, None]:
     return np.stack(result, axis=0)
 
 
+def _get_video_frames_multipage(path: str) -> npt.NDArray:
+    ret, frames = cv2.imreadmulti(path)
+    if not ret:
+        raise Exception("File read unsuccessful!")
+    frames = np.array(frames)
+    if np.max(frames) > 255:
+        frames = frames / 65535
+    else:
+        frames = frames / 255
+    return frames
+
+
 def _get_video_frames_other(path: str) -> npt.NDArray:
     capture = cv2.VideoCapture(path)
     n_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -41,7 +54,7 @@ def _get_video_frames_other(path: str) -> npt.NDArray:
 
         # if frame is read correctly ret is True
         if not ret:
-            print("Can't receive frame (stream end?). Exiting ...")
+            print("Can't receive frame (stream end?). Exiting...")
             break
 
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -80,15 +93,17 @@ def get_video_frames(path: str, nd2_calcium_layer_index=0) -> Union[npt.NDArray,
                 result = _get_video_frames_nd2(path, nd2_calcium_layer_index)
             case ".vsi":
                 result = _get_video_frames_vsi(path)
+            case ".tif" | ".tiff":
+                result = _get_video_frames_multipage(path)
             case _:
                 result = _get_video_frames_other(path)
     except FileNotFoundError:
         print(f"File with path {path} cannot be found. Cancelling.")
         if format == ".vsi":
             javabridge.kill_vm()
-    except:
-        print("An unexpected exception occurred whilst reading files. Cancelling.")
-        if format == ".vsi":
-            javabridge.kill_vm()
+    # except:
+    #     print("An unexpected exception occurred whilst reading files. Cancelling.")
+    #     if format == ".vsi":
+    #         javabridge.kill_vm()
 
     return result

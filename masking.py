@@ -1,3 +1,5 @@
+from math import ceil
+from typing import Tuple
 import cv2
 import numpy as np
 import numpy.typing as npt
@@ -11,14 +13,13 @@ def get_mask(frames: npt.NDArray) -> npt.NDArray:
 
     stacked_frames = frames.reshape(height * n_frames, width)
 
-    thresh, _ = cv2.threshold(
+    threshold, _ = cv2.threshold(
         stacked_frames, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
-    print(thresh)
 
     raw_masks = np.zeros_like(frames)
     for i, frame in enumerate(frames):
-        _, raw_threshold = cv2.threshold(frame, 0, thresh, cv2.THRESH_BINARY)
+        _, raw_threshold = cv2.threshold(frame, 0, threshold, cv2.THRESH_BINARY)
 
         raw_masks[i] = raw_threshold
 
@@ -78,3 +79,146 @@ def get_mask(frames: npt.NDArray) -> npt.NDArray:
     )
 
     return resulting_mask
+
+
+def _get_kernel_size(sigma: float) -> Tuple[int, int]:
+    # sigma = 0.3*((ksize-1)*0.5 - 1) + 0.8
+    size = ceil(2 * ((sigma - 0.8) / 0.3 + 1))
+    if size % 2 == 0:
+        size += 1
+    return (size, size)
+
+
+def get_mask_multi_cell(frames: npt.NDArray) -> npt.NDArray:
+    # Assuming that the each pixel in every frame have range [0, 1].
+    average_frame = np.mean(frames, axis=0)
+    average_frame_rescaled = np.interp(
+        average_frame, (average_frame.min(), average_frame.max()), (0, 1)
+    )
+    average_frame_rescaled = (255 * average_frame_rescaled).astype(np.uint8)
+
+    # Here we follow matlab's cliplimit.
+    # TODO: Test that this indeed gives us the same output.
+    clahe = cv2.createCLAHE(clipLimit=2.55)  # keep note of this in the notes
+
+    average_frame_equalised = clahe.apply(average_frame_rescaled)
+
+    gauss_1 = cv2.GaussianBlur(average_frame_equalised, _get_kernel_size(2.5), 2.5, 2.5)
+    gauss_2 = cv2.GaussianBlur(average_frame_equalised, _get_kernel_size(0.2), 0.2, 0.2)
+    diff_gauss = np.clip(
+        gauss_1.astype(np.int16) - gauss_2.astype(np.int16), 0, 255
+    ).astype(np.uint8)
+    diff_gauss_equalised = clahe.apply(clahe.apply(diff_gauss))
+    _, cell_partition_negative = cv2.threshold(
+        diff_gauss_equalised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+    cell_partition = cv2.bitwise_not(cell_partition_negative)
+    average_frame_partitioned = clahe.apply(
+        average_frame_equalised * np.clip(cell_partition, 0, 1)
+    )
+
+    _, raw_mask = cv2.threshold(
+        average_frame_partitioned, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+
+    erosion_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    mask = cv2.erode(raw_mask, erosion_kernel)
+
+    (width, height) = mask.shape
+
+    (
+        n_blobs,
+        image_with_separated_blobs,
+        stats,
+        _,
+    ) = cv2.connectedComponentsWithStats(mask)
+
+    for blob in range(n_blobs):
+        blob_left, blob_top, blob_width, blob_height, blob_area = stats[blob]
+        if (
+            blob_left == 0
+            or blob_top == 0
+            or blob_left + blob_width == width
+            or blob_top + blob_height == height
+            or blob_area < 45
+        ):
+            mask[image_with_separated_blobs == blob] = 0
+            pass
+        else:
+            contours = cv2.findContours(
+                np.where(image_with_separated_blobs == blob, mask, 0),
+                cv2.RETR_TREE,
+                cv2.CHAIN_APPROX_NONE,
+            )
+            contours = contours[0] if len(contours) == 2 else contours[1]
+            big_contour = max(contours, key=cv2.contourArea)
+            ellipse = cv2.fitEllipse(big_contour)
+            (_, _), (minor_axis_length, major_axis_length), _ = ellipse
+            if (
+                major_axis_length / minor_axis_length < 2.8
+                and max(blob_width, blob_height) / min(blob_width, blob_height) < 3
+            ):
+                mask[image_with_separated_blobs == blob] = 0
+            pass
+
+    return mask
+
+
+def get_mask_multi_cell_v2(frames: npt.NDArray) -> npt.NDArray:
+    # TODO: Rename variables into something more sensible.
+    # Assuming that the each pixel in every frame have range [0, 1].
+    average_frame = np.mean(frames, axis=0)
+    I = np.interp(average_frame, (average_frame.min(), average_frame.max()), (0, 1))
+    I = (255 * I).astype(np.uint8)
+
+    # Here we follow matlab's cliplimit.
+    # TODO: Test that this indeed gives us the same output.
+    clahe = cv2.createCLAHE(clipLimit=5)  # keep note of this in the notes
+
+    asdf = clahe.apply(I)
+
+    gauss_1 = cv2.GaussianBlur(asdf, _get_kernel_size(2.5), 2.5, 2.5)
+    gauss_2 = cv2.GaussianBlur(asdf, _get_kernel_size(0.2), 0.2, 0.2)
+    diff_gauss = gauss_1.astype(np.int16) - gauss_2.astype(np.int16)
+    diff_gauss = np.clip(
+        gauss_1.astype(np.int16) - gauss_2.astype(np.int16), 0, 255
+    ).astype(np.uint8)
+
+    clahe = cv2.createCLAHE(clipLimit=40)  # keep note of this in the notes
+    diff_gauss = clahe.apply(diff_gauss)
+    # diff_gauss = clahe.apply(diff_gauss)
+
+    _, cell_partition_negative = cv2.threshold(
+        diff_gauss, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+    cell_partition = cv2.bitwise_not(cell_partition_negative)
+
+    _, mask = cv2.threshold(asdf, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    mask = mask * cell_partition
+
+    SE = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    mask = cv2.erode(mask, SE)
+
+    (width, height) = mask.shape
+
+    (
+        n_blobs,
+        image_with_separated_blobs,
+        stats,
+        _,
+    ) = cv2.connectedComponentsWithStats(mask)
+
+    for blob in range(n_blobs):
+        blob_left, blob_top, blob_width, blob_height, blob_area = stats[blob]
+        if (
+            blob_left == 0
+            or blob_top == 0
+            or blob_left + blob_width == width
+            or blob_top + blob_height == height
+            # or blob_area < 45
+            # or max(blob_width, blob_height) / min(blob_width, blob_height) < 2.5
+        ):
+            # mask[image_with_separated_blobs == blob] = 0
+            pass
+
+    return mask
