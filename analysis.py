@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.signal import find_peaks, peak_prominences
 from scipy.optimize import curve_fit
-from flags import HANDLE_LAST_TRANSIENT
+from flags import HANDLE_LAST_TRANSIENT, INTERPOLATE_INTERCEPT
 
 from utils import moving_average
 
@@ -177,15 +177,15 @@ def photo_bleach_correction(
     return corrected_trace
 
 
-def _get_intercept(values: npt.NDArray, threshold: float) -> Union[float, int]:
-    mask = values > threshold
+def _get_intercept(values, threshold: float, last: bool = False) -> float:
+    mask = values >= threshold
     intersections, *_ = np.where(np.diff(mask))
     if intersections.size > 0:
-        # The .item() is to comply with typing, totally unnecessary.
-        return np.median(intersections).item()
-    if mask.size > 0 and not mask[0]:
-        return mask.size
-    return 0
+        index = -1 if last else 0
+        i = intersections[index]
+        if INTERPOLATE_INTERCEPT and i + 1 < values.size:
+            return i + (threshold - values[i]) / (values[i + 1] - values[i])
+    return mask.size if last else 0
 
 
 def get_parameters(
@@ -210,17 +210,25 @@ def get_parameters(
     adjusted_magnitude = peak - adjusted_baseline
 
     # Get attack time.
-    t_attack = _get_intercept(trace_attack, adjusted_baseline) * acquisition_period
+    t_attack = (
+        _get_intercept(trace_attack, adjusted_baseline, last=True) * acquisition_period
+    )
     t_attack_90 = (
-        _get_intercept(trace_attack, adjusted_baseline + 0.1 * adjusted_magnitude)
+        _get_intercept(
+            trace_attack, adjusted_baseline + 0.1 * adjusted_magnitude, last=True
+        )
         * acquisition_period
     )
     t_attack_50 = (
-        _get_intercept(trace_attack, adjusted_baseline + 0.5 * adjusted_magnitude)
+        _get_intercept(
+            trace_attack, adjusted_baseline + 0.5 * adjusted_magnitude, last=True
+        )
         * acquisition_period
     )
     t_attack_10 = (
-        _get_intercept(trace_attack, adjusted_baseline + 0.9 * adjusted_magnitude)
+        _get_intercept(
+            trace_attack, adjusted_baseline + 0.9 * adjusted_magnitude, last=True
+        )
         * acquisition_period
     )
 
