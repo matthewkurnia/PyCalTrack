@@ -6,9 +6,9 @@ import numpy as np
 import numpy.typing as npt
 from scipy.signal import find_peaks, peak_prominences
 from scipy.optimize import curve_fit
-from flags import HANDLE_LAST_TRANSIENT, INTERPOLATE_INTERCEPT
+from core.flags import HANDLE_LAST_TRANSIENT, INTERPOLATE_INTERCEPT
+from core.utils import moving_average
 
-from utils import moving_average
 
 DIFF_KERNEL_WIDTH = 8
 PEAK_PROMINENCE_THRESHOLD = 0.5

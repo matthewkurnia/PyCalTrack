@@ -1,11 +1,14 @@
 import numpy as np
+import os
 from matplotlib import colormaps
 from matplotlib import pyplot as plt
 from scipy.io import loadmat
+import numpy.typing as npt
 
-from analysis import beat_segmentation, get_calcium_trace, get_parameters
-from masking import get_mask, get_mask_multi_cell, get_mask_multi_cell_v2
-from reader import get_video_frames
+from core.analysis import beat_segmentation, get_calcium_trace, get_parameters
+from core.masking import get_mask, get_mask_multi_cell, get_mask_multi_cell_v2
+from core.reader import get_video_frames
+from parameters import path_to_single_cell_video_directory
 
 PATH_ND2_TEST = (
     "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/"
@@ -17,7 +20,21 @@ PATH_VSI_TEST = (
 PATH_MULTICELL_TIF_TEST = "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/video1.tif"
 
 
+def _get_videos(paths: list[str]) -> list[npt.NDArray]:
+    result = []
+    for path in paths:
+        video_frames = get_video_frames(path)
+        if video_frames is not None:
+            result.append(video_frames)
+    return result
+
+
 def main() -> None:
+    for file_name in os.scandir(path_to_single_cell_video_directory):
+        if file_name.is_file():
+            print(file_name.path)
+
+    return
     # frames = get_video_frames(PATH_MULTICELL_TIF_TEST)
     # if frames is None:
     #     print("AAAAAAAAAAAAAAAAAAAA")
