@@ -10,13 +10,20 @@ import numpy as np
 import numpy.typing as npt
 
 
+def pre_read() -> None:
+    javabridge.start_vm(class_path=bf.JARS)
+
+
+def post_read() -> None:
+    javabridge.kill_vm()
+
+
 def _get_video_frames_nd2(path: str, nd2_calcium_layer_index=0) -> npt.NDArray:
     images = nd2.imread(path)
     return images[:, nd2_calcium_layer_index, :, :]
 
 
 def _get_video_frames_vsi(path: str) -> Union[npt.NDArray, None]:
-    javabridge.start_vm(class_path=bf.JARS)
     t = 0
     result = []
     try:
@@ -27,7 +34,6 @@ def _get_video_frames_vsi(path: str) -> Union[npt.NDArray, None]:
                 t += 1
     except javabridge.JavaException:
         print(f"Java exception at t = {t}. Assuming EOF.")
-    javabridge.kill_vm()
     return np.stack(result, axis=0)
 
 
@@ -43,7 +49,7 @@ def _get_video_frames_multipage(path: str) -> npt.NDArray:
     return frames
 
 
-def _get_video_frames_other(path: str) -> npt.NDArray:
+def _get_video_frames_other(path: str) -> Union[npt.NDArray, None]:
     capture = cv2.VideoCapture(path)
     n_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     frames = []
@@ -62,6 +68,8 @@ def _get_video_frames_other(path: str) -> npt.NDArray:
 
         frames.append(image)
 
+    if len(frames) == 0:
+        return None
     return np.array(frames)
 
 
@@ -98,12 +106,9 @@ def get_video_frames(path: str, nd2_calcium_layer_index=0) -> Union[npt.NDArray,
             case _:
                 result = _get_video_frames_other(path)
     except FileNotFoundError:
-        print(f"File with path {path} cannot be found. Cancelling.")
-        if format == ".vsi":
-            javabridge.kill_vm()
-    # except:
-    #     print("An unexpected exception occurred whilst reading files. Cancelling.")
-    #     if format == ".vsi":
-    #         javabridge.kill_vm()
+        print(f"File with path {path} cannot be found, ignoring...")
+    except:
+
+        print(f"An unexpected exception occurred whilst reading {path}, ignoring...")
 
     return result

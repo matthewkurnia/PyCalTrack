@@ -24,6 +24,8 @@ def get_calcium_trace(frames: npt.NDArray, mask: npt.NDArray) -> npt.NDArray:
 def _find_peak_indices(x: npt.NDArray) -> npt.NDArray:
     peaks_raw, _ = find_peaks(x)
     prominences, *_ = peak_prominences(x, peaks_raw)
+    if prominences.size == 0:
+        return np.array([])
     indices, _ = find_peaks(
         x, prominence=PEAK_PROMINENCE_THRESHOLD * np.max(prominences)
     )
@@ -35,7 +37,6 @@ def beat_segmentation(
     acquisition_frequency: float,
     pacing_frequency: float,
     max_pacing_deviation: float,
-    single_beat: bool = False,
 ) -> Union[list[Tuple[int, int]], None]:
     # Handle acquisition frequency > 100.
     calcium_trace_original = calcium_trace
@@ -49,7 +50,8 @@ def beat_segmentation(
         stride = 1
 
     pacing_period = 1 / pacing_frequency
-    cutoff_threshold = pacing_period * (1 - max_pacing_deviation)
+    cutoff_lower_bound = pacing_period * (1 - max_pacing_deviation)
+    cutoff_upper_bound = pacing_period * (1 + max_pacing_deviation)
 
     # Offset is 10% of the pacing period in number of frames.
     offset = ceil(TRACE_ONSET_DELAY * pacing_period * acquisition_frequency)
@@ -68,15 +70,22 @@ def beat_segmentation(
 
     trace_peak_periods = np.diff(trace_peak_indices / acquisition_frequency)
     # Check if there are any periods which is less than our cutoff threshold.
-    extra_beat_detected = np.any(trace_peak_periods < cutoff_threshold)
+    deviation_detected = np.any(trace_peak_periods < cutoff_lower_bound)
+    deviation_detected |= np.any(trace_peak_periods > cutoff_upper_bound)
 
     if (diff_peak_indices.size - trace_peak_indices.size) > 1:
         # Number of peaks in gradient does not match with number of peaks in value.
-        # TODO: Return early here.
+        print(
+            "Number of peaks in gradient does not match with number of peaks in value, skipping."
+        )
         return None
-    elif extra_beat_detected:
-        # Period between beats less than cutoff threshold.
-        # TODO: Return early here.
+    elif deviation_detected:
+        # Beat periods deviate too much from specified pacing period.
+        print("Beat periods deviate too much from specified pacing period, skipping.")
+        return None
+    elif diff_peak_indices.size == 0:
+        # Trace too flat, unable to detect any peaks in gradient.
+        print("Flat trace detected, skipping.")
         return None
 
     segmented_beats: list[npt.NDArray] = []
@@ -110,7 +119,7 @@ def beat_segmentation(
         last_transient_period = (
             last_transient_end - last_transient_start
         ) / acquisition_frequency
-        if last_transient_period >= cutoff_threshold:
+        if last_transient_period >= cutoff_lower_bound:
             start = last_transient_start * stride
             end = last_transient_end * stride
             segmented_beats.append(calcium_trace_original[start:end])
@@ -149,7 +158,7 @@ def photo_bleach_correction(
     beat_segments: list[Tuple[int, int]],
     acquisition_frequency: float,
     pacing_frequency: float,
-) -> None:
+) -> npt.NDArray:
     # TODO: Rename variables to something more sensible.
     pacing_period = 1 / pacing_frequency
     baseline_duration = ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency)
@@ -164,12 +173,12 @@ def photo_bleach_correction(
         magnitude = peak - baseline
         val95 = baseline + 0.05 * magnitude
         baseline_values_mask = segmented_beat < val95
-        np.append(xs, segmented_beat[baseline_values_mask])
-        np.append(ys, np.arange(start, end)[baseline_values_mask])
+        xs = np.append(xs, np.arange(start, end)[baseline_values_mask])
+        ys = np.append(ys, segmented_beat[baseline_values_mask])
 
     # we are trying to fit a polynomial of degree 2
     polynomial = lambda x, a, b, c: a * x * x + b * x + c
-    parameters, *_ = curve_fit(polynomial, xs, ys)
+    parameters, *_ = curve_fit(polynomial, xs, ys, p0=[1, 1, baseline])
     trend = np.polyval(parameters, np.arange(calcium_trace.size))
 
     corrected_trace = calcium_trace - trend + trend[0]
