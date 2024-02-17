@@ -1,8 +1,10 @@
+from math import inf
 from typing import Tuple
 import numpy as np
 import os
 from matplotlib import colormaps
 from matplotlib import pyplot as plt
+import pandas as pd
 from scipy.io import loadmat
 import numpy.typing as npt
 
@@ -92,28 +94,14 @@ def main() -> None:
 
         single_cell_traces.append(
             (
-                path[len(single_cell_parameters.videos_directory) + 1 :],
+                path[len(single_cell_parameters.videos_directory) + 1 :].replace(
+                    "/", "-"
+                ),
                 analysed_trace,
                 corrected_trace,
-                beat_segments is not None,
+                beat_segments,
             )
         )
-
-    # n_rows = max(len(single_cell_videos) - n_success, n_success)
-    # plt.subplot2grid((n_rows, 3), (0, 0)).figtext(0.25, 0.8, "Original Trace(s)")
-    # plt.subplot2grid((n_rows, 3), (0, 1)).figtext(0.5, 0.8, "Corrected Trace(s)")
-    # plt.subplot2grid((n_rows, 3), (0, 2)).figtext(0.75, 0.8, "Ignored Trace(s)")
-    # i_successful = 1
-    # i_failed = 1
-    # for original_trace, corrected_trace, successful in single_cell_traces:
-    #     if successful:
-    #         plt.subplot2grid((n_rows, 3), (i_successful, 0)).plot(original_trace)
-    #         plt.subplot2grid((n_rows, 3), (i_successful, 1)).plot(corrected_trace)
-    #         i_successful += 1
-    #     else:
-    #         plt.subplot2grid((n_rows, 3), (i_failed, 2)).plot(original_trace)
-    #         i_failed += 1
-    # plt.show()
 
     fig, big_axes = plt.subplots(nrows=1, ncols=3)
     fig.tight_layout()
@@ -127,7 +115,8 @@ def main() -> None:
     n_rows = max(len(single_cell_videos) - n_success, n_success)
     i_successful = 0
     i_failed = 0
-    for name, original_trace, corrected_trace, successful in single_cell_traces:
+    for name, original_trace, corrected_trace, beat_segments in single_cell_traces:
+        successful = beat_segments is not None
         if successful:
             ax = fig.add_subplot(n_rows, 3, i_successful * 3 + 1)
             ax.plot(original_trace)
@@ -144,6 +133,92 @@ def main() -> None:
 
     plt.tight_layout(pad=0.6)
     plt.show()
+
+    if not os.path.exists("results"):
+        os.mkdir("results")
+
+    with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
+        for name, original_trace, corrected_trace, beat_segments in single_cell_traces:
+            if beat_segments is not None:
+                if single_cell_parameters.good_snr:
+                    parameters_list = []
+                    for start, end in beat_segments:
+                        parameters = get_parameters(
+                            corrected_trace[start:end],
+                            single_cell_parameters.acquisition_frequency,
+                            single_cell_parameters.pacing_frequency,
+                        )
+                        parameters_list.append(parameters)
+                    parameters_list_df = pd.DataFrame(
+                        data=parameters_list,
+                        columns=[
+                            "baseline",
+                            "peak / baseline",
+                            "duration",
+                            "duration_90",
+                            "duration_50",
+                            "duration_10",
+                            "t_start",
+                            "t_end",
+                            "t_attack",
+                            "t_attack_10",
+                            "t_attack_50",
+                            "t_attack_90",
+                            "t_decay",
+                            "t_decay_10",
+                            "t_decay_50",
+                            "t_decay_90",
+                            "tau",
+                            "a",
+                            "c",
+                            "r_squared",
+                        ],
+                    )
+                    parameters_list_df.to_excel(
+                        excel_writer, sheet_name=name, index=False
+                    )
+                else:
+                    min_length = inf
+                    for start, end in beat_segments:
+                        min_length = min(min_length, end - start)
+                    stacked_beats = np.stack(
+                        [
+                            corrected_trace[start : start + min_length]
+                            for start, _ in beat_segments
+                        ]
+                    )
+                    mean_beat = np.mean(stacked_beats, axis=0)
+                    parameters = get_parameters(
+                        mean_beat,
+                        single_cell_parameters.acquisition_frequency,
+                        single_cell_parameters.pacing_frequency,
+                    )
+                    parameters_df = pd.DataFrame(
+                        data=[parameters],
+                        columns=[
+                            "baseline",
+                            "peak / baseline",
+                            "duration",
+                            "duration_90",
+                            "duration_50",
+                            "duration_10",
+                            "t_start",
+                            "t_end",
+                            "t_attack",
+                            "t_attack_10",
+                            "t_attack_50",
+                            "t_attack_90",
+                            "t_decay",
+                            "t_decay_10",
+                            "t_decay_50",
+                            "t_decay_90",
+                            "tau",
+                            "a",
+                            "c",
+                            "r_squared",
+                        ],
+                    )
+                    parameters_df.to_excel(excel_writer, sheet_name=name, index=False)
 
     multi_cell_videos = _get_videos(multi_cell_video_paths)
     post_read()

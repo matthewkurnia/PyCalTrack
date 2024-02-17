@@ -204,104 +204,129 @@ def get_parameters(
     acquisition_period = 1 / acquisition_frequency
     baseline_duration = ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency)
 
-    baseline = np.mean(trace[-baseline_duration:])
+    baseline = np.mean(trace[-baseline_duration:]).item()
     peak_location = np.argmax(trace)
     peak = trace[peak_location]
     magnitude = peak - baseline
 
     trace_attack = trace[:peak_location]
     trace_decay = trace[peak_location:]
-    attack_duration = float(peak_location) * acquisition_period
+    time_to_peak = float(peak_location) * acquisition_period
 
     # Adjusted baseline and magnitude to calculate the rest of the parameters.
     # We increase the baseline slightly to accommodate noise.
     adjusted_baseline = baseline + BASELINE_INCREASE * magnitude
     adjusted_magnitude = peak - adjusted_baseline
 
-    # Get attack time.
-    t_attack = (
+    t_start = (
         _get_intercept(trace_attack, adjusted_baseline, last=True) * acquisition_period
     )
-    t_attack_90 = (
+
+    t_end = (
+        _get_intercept(trace_decay, adjusted_baseline) * acquisition_period
+        + time_to_peak
+    )
+
+    # Get attack time.
+    t_attack = time_to_peak - t_start
+    t_attack_10 = (
         _get_intercept(
             trace_attack, adjusted_baseline + 0.1 * adjusted_magnitude, last=True
         )
         * acquisition_period
+        - t_start
     )
     t_attack_50 = (
         _get_intercept(
             trace_attack, adjusted_baseline + 0.5 * adjusted_magnitude, last=True
         )
         * acquisition_period
+        - t_start
     )
-    t_attack_10 = (
+    t_attack_90 = (
         _get_intercept(
             trace_attack, adjusted_baseline + 0.9 * adjusted_magnitude, last=True
         )
         * acquisition_period
+        - t_start
     )
 
     # Get decay time.
     t_decay = (
-        _get_intercept(trace_decay, adjusted_baseline) * acquisition_period
-        + attack_duration
-    )
-    t_decay_90 = (
-        _get_intercept(trace_decay, adjusted_baseline + 0.1 * adjusted_magnitude)
+        _get_intercept(trace_decay, adjusted_baseline)
         * acquisition_period
-        + attack_duration
-    )
-    t_decay_50 = (
-        _get_intercept(trace_decay, adjusted_baseline + 0.5 * adjusted_magnitude)
-        * acquisition_period
-        + attack_duration
+        # + time_to_peak
     )
     t_decay_10 = (
         _get_intercept(trace_decay, adjusted_baseline + 0.9 * adjusted_magnitude)
         * acquisition_period
-        + attack_duration
+        # + time_to_peak
+    )
+    t_decay_50 = (
+        _get_intercept(trace_decay, adjusted_baseline + 0.5 * adjusted_magnitude)
+        * acquisition_period
+        # + time_to_peak
+    )
+    t_decay_90 = (
+        _get_intercept(trace_decay, adjusted_baseline + 0.1 * adjusted_magnitude)
+        * acquisition_period
+        # + time_to_peak
     )
 
-    duration = t_decay - t_attack
-    duration_90 = t_decay_90 - t_attack_90
-    duration_50 = t_decay_50 - t_attack_50
-    duration_10 = t_decay_10 - t_attack_10
+    duration = t_attack + t_decay
+    duration_90 = t_decay_90 + t_attack - t_attack_10
+    duration_50 = t_decay_50 + t_attack - t_attack_50
+    duration_10 = t_decay_10 + t_attack - t_attack_90
+
     exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
     xs = np.arange(trace_decay.size)
     ys = trace_decay
-    [_, b, _], *_ = curve_fit(exponential, xs, ys, p0=[trace_decay[0], 1, 0])
-    tau = 1 / b
+    [a, b, c], *_ = curve_fit(exponential, xs, ys, p0=[trace_decay[0], 0.1, 0])
+    residuals = ys - exponential(xs, a, b, c)
+    ss_res = np.sum(residuals**2)
+    ss_tot = np.sum((ys - np.mean(ys)) ** 2)
+    r_squared = 1 - (ss_res / ss_tot)
+    tau = 1 / (b * acquisition_frequency)
 
-    print(
-        [
-            tau,
-            t_attack,
-            t_attack_90,
-            t_attack_50,
-            t_attack_10,
-            t_decay,
-            t_decay_90,
-            t_decay_50,
-            t_decay_10,
-            duration,
-            duration_90,
-            duration_50,
-            duration_10,
-        ]
-    )
+    plt.plot(trace_decay)
+    plt.plot(exponential(xs, a, b, c))
+    plt.show()
+
+    # return [
+    #     tau,
+    #     t_attack,
+    #     t_attack_90,
+    #     t_attack_50,
+    #     t_attack_10,
+    #     t_decay,
+    #     t_decay_90,
+    #     t_decay_50,
+    #     t_decay_10,
+    #     duration,
+    #     duration_90,
+    #     duration_50,
+    #     duration_10,
+    # ]
 
     return [
-        tau,
-        t_attack,
-        t_attack_90,
-        t_attack_50,
-        t_attack_10,
-        t_decay,
-        t_decay_90,
-        t_decay_50,
-        t_decay_10,
+        baseline,
+        np.max(trace) / baseline,
         duration,
         duration_90,
         duration_50,
         duration_10,
+        t_start,
+        t_end,
+        t_attack,
+        t_attack_10,
+        t_attack_50,
+        t_attack_90,
+        t_decay,
+        t_decay_10,
+        t_decay_50,
+        t_decay_90,
+        tau,
+        a,
+        c,
+        r_squared,
     ]
