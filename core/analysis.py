@@ -1,3 +1,4 @@
+import config
 from math import ceil
 from typing import Tuple, Union
 from matplotlib import pyplot as plt
@@ -10,7 +11,7 @@ from core.flags import HANDLE_LAST_TRANSIENT, INTERPOLATE_INTERCEPT
 from core.utils import moving_average
 
 
-DIFF_KERNEL_WIDTH = 8
+DIFF_KERNEL_WIDTH = 8 if config.usage == config.Usage.SINGLE_CELL else 10
 PEAK_PROMINENCE_THRESHOLD = 0.5
 TRACE_ONSET_DELAY = 0.1
 BASELINE_WINDOW = 0.2
@@ -18,7 +19,9 @@ BASELINE_INCREASE = 0.03
 
 
 def get_calcium_trace(frames: npt.NDArray, mask: npt.NDArray) -> npt.NDArray:
-    return np.sum(frames[:, mask], axis=1)
+    if config.usage == config.Usage.SINGLE_CELL:
+        return np.sum(frames[:, mask], axis=1)
+    return np.mean(frames[:, mask], axis=1)
 
 
 def _find_peak_indices(x: npt.NDArray) -> npt.NDArray:
@@ -45,9 +48,13 @@ def beat_segmentation(
         stride = round(acquisition_frequency / 100)
         # The 24 here may need to be replaced to something else.
         calcium_trace = moving_average(calcium_trace, 24)[::stride]
+        if config.usage == config.Usage.MULTI_CELL:
+            calcium_trace = moving_average(calcium_trace[::stride], 5)
         acquisition_frequency = acquisition_frequency / stride
     else:
         stride = 1
+        if config.usage == config.Usage.MULTI_CELL:
+            calcium_trace = moving_average(calcium_trace, 5)
 
     pacing_period = 1 / pacing_frequency
     cutoff_lower_bound = pacing_period * (1 - max_pacing_deviation)
@@ -66,7 +73,6 @@ def beat_segmentation(
 
     # Find the peaks of the trace itself.
     trace_peak_indices = _find_peak_indices(calcium_trace)
-    # print(trace_peak_indices)
 
     trace_peak_periods = np.diff(trace_peak_indices / acquisition_frequency)
     # Check if there are any periods which is less than our cutoff threshold.
@@ -287,10 +293,6 @@ def get_parameters(
     ss_tot = np.sum((ys - np.mean(ys)) ** 2)
     r_squared = 1 - (ss_res / ss_tot)
     tau = 1 / (b * acquisition_frequency)
-
-    plt.plot(trace_decay)
-    plt.plot(exponential(xs, a, b, c))
-    plt.show()
 
     # return [
     #     tau,
