@@ -158,8 +158,9 @@ def main() -> None:
                 )
             )
 
-        # Save traces to file.
+        # Save analysed traces to file.
         with pd.ExcelWriter("results/calcium_traces.xlsx") as excel_writer:
+            sheet_written = False
             for name, _, corrected_trace, beat_segments, _ in single_cell_traces:
                 if beat_segments is not None:
                     individual_beats = [
@@ -169,10 +170,29 @@ def main() -> None:
                     individual_beats_df.to_excel(
                         excel_writer, sheet_name=name, index=False, header=False
                     )
+                    sheet_written = True
+            if not sheet_written:
+                pd.DataFrame([]).to_excel(excel_writer)
             print("Saved traces to results/calcium_traces.xlsx!")
+
+        with pd.ExcelWriter("results/ignored_traces.xlsx") as excel_writer:
+            sheet_written = False
+            for name, calcium_trace, _, beat_segments, _ in single_cell_traces:
+                if beat_segments is None:
+                    trace_df = pd.DataFrame(
+                        data=np.reshape(calcium_trace, (calcium_trace.size, 1))
+                    )
+                    trace_df.to_excel(
+                        excel_writer, sheet_name=name, index=False, header=False
+                    )
+                    sheet_written = True
+            if not sheet_written:
+                pd.DataFrame([]).to_excel(excel_writer)
+            print("Saved ignored traces to results/ignored_traces.xlsx!")
 
         # Save fitted parameters to file.
         with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
+            sheet_written = False
             for name, _, _, _, parameters_list in single_cell_traces:
                 if parameters_list is not None:
                     parameters_df = pd.DataFrame(
@@ -180,44 +200,48 @@ def main() -> None:
                         columns=PARAMETER_NAMES,
                     )
                     parameters_df.to_excel(excel_writer, sheet_name=name, index=False)
+                    sheet_written = True
+            if not sheet_written:
+                pd.DataFrame([]).to_excel(excel_writer)
             print("Saved fitted parameters to results/calcium_traces.xlsx!")
 
-        fig, big_axes = plt.subplots(nrows=1, ncols=3)
-        fig.tight_layout()
-        big_axes[0].set_title("Original Trace(s)", fontsize=16, pad=48)
-        big_axes[1].set_title("Corrected Trace(s)", fontsize=16, pad=48)
-        big_axes[2].set_title("Ignored Trace(s)", fontsize=16, pad=48)
+        if not config.quiet:
+            fig, big_axes = plt.subplots(nrows=1, ncols=3)
+            fig.tight_layout()
+            big_axes[0].set_title("Original Trace(s)", fontsize=16, pad=48)
+            big_axes[1].set_title("Corrected Trace(s)", fontsize=16, pad=48)
+            big_axes[2].set_title("Ignored Trace(s)", fontsize=16, pad=48)
 
-        for big_ax in big_axes:
-            big_ax.axis("off")
+            for big_ax in big_axes:
+                big_ax.axis("off")
 
-        n_rows = max(len(videos) - n_success, n_success)
-        i_successful = 0
-        i_failed = 0
-        for (
-            name,
-            original_trace,
-            corrected_trace,
-            beat_segments,
-            _,
-        ) in single_cell_traces:
-            successful = beat_segments is not None
-            if successful:
-                ax = fig.add_subplot(n_rows, 3, i_successful * 3 + 1)
-                ax.plot(original_trace)
-                ax.set_title(name)
-                ax = fig.add_subplot(n_rows, 3, i_successful * 3 + 2)
-                ax.plot(corrected_trace)
-                ax.set_title(name)
-                i_successful += 1
-            else:
-                ax = fig.add_subplot(n_rows, 3, i_failed * 3 + 3)
-                ax.plot(original_trace)
-                ax.set_title(name)
-                i_failed += 1
+            n_rows = max(len(videos) - n_success, n_success)
+            i_successful = 0
+            i_failed = 0
+            for (
+                name,
+                original_trace,
+                corrected_trace,
+                beat_segments,
+                _,
+            ) in single_cell_traces:
+                successful = beat_segments is not None
+                if successful:
+                    ax = fig.add_subplot(n_rows, 3, i_successful * 3 + 1)
+                    ax.plot(original_trace)
+                    ax.set_title(name)
+                    ax = fig.add_subplot(n_rows, 3, i_successful * 3 + 2)
+                    ax.plot(corrected_trace)
+                    ax.set_title(name)
+                    i_successful += 1
+                else:
+                    ax = fig.add_subplot(n_rows, 3, i_failed * 3 + 3)
+                    ax.plot(original_trace)
+                    ax.set_title(name)
+                    i_failed += 1
 
-        plt.tight_layout(pad=0.6)
-        plt.show()
+            plt.tight_layout(pad=0.6)
+            plt.show()
     else:
         multi_cell_traces = []
         for video_frames, path in videos:
@@ -226,7 +250,7 @@ def main() -> None:
             calcium_traces = [
                 get_calcium_trace(analysed_frames, mask) for mask, _ in masks
             ]
-            trace_analysis = []
+            traces_analysis = []
             for mask, centre in masks:
                 calcium_trace = get_calcium_trace(video_frames, mask)
                 beat_segments = beat_segmentation(
@@ -250,7 +274,7 @@ def main() -> None:
                     corrected_trace = None
                     mean_beat = None
                     parameters = None
-                trace_analysis.append(
+                traces_analysis.append(
                     (
                         mask,
                         centre,
@@ -265,17 +289,17 @@ def main() -> None:
                 (
                     np.mean(video_frames, axis=0),
                     _get_name_from_path(path),
-                    trace_analysis,
+                    traces_analysis,
                 )
             )
 
-        # Save traces to file.
+        # Save analysed traces to file.
         with pd.ExcelWriter("results/calcium_traces.xlsx") as excel_writer:
-            for mean_frame, name, trace_analysis in multi_cell_traces:
+            sheet_written = False
+            for mean_frame, name, traces_analysis in multi_cell_traces:
                 mean_beats = []
                 analysed_cells = []
-                ignored_cells = []
-                for i, (_, _, _, _, mean_beat, _, _) in enumerate(trace_analysis):
+                for i, (_, _, _, _, mean_beat, _, _) in enumerate(traces_analysis):
                     if mean_beat is not None:
                         mean_beats.append(mean_beat)
                         analysed_cells.append(i)
@@ -284,14 +308,40 @@ def main() -> None:
                     columns=[f"Cell {i + 1}" for i in analysed_cells],
                 )
                 mean_beats_df.to_excel(excel_writer, sheet_name=name, index=False)
+                sheet_written = True
+            if not sheet_written:
+                pd.DataFrame([]).to_excel(excel_writer)
             print("Saved traces to results.calcium_traces.xlsx!")
+
+        # Save ignored traces to file.
+        with pd.ExcelWriter("results/ignored_traces.xlsx") as excel_writer:
+            sheet_written = False
+            for _, name, traces_analysis in multi_cell_traces:
+                ignored_traces = []
+                ignored_cells = []
+                for i, (_, _, calcium_trace, _, _, beat_segments, _) in enumerate(
+                    traces_analysis
+                ):
+                    if beat_segments is None:
+                        ignored_traces.append(calcium_trace)
+                        ignored_cells.append(i)
+                ignored_traces_df = pd.DataFrame(
+                    data=zip(*ignored_traces),
+                    columns=[f"Cell {i + 1}" for i in ignored_cells],
+                )
+                ignored_traces_df.to_excel(excel_writer, sheet_name=name, index=False)
+                sheet_written = True
+            if not sheet_written:
+                pd.DataFrame([]).to_excel(excel_writer)
+            print("Saved ignored traces to results/ignored_traces.xlsx!")
 
         # Save fitted parameters to file.
         with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
-            for mean_frame, name, trace_analysis in multi_cell_traces:
+            sheet_written = False
+            for mean_frame, name, traces_analysis in multi_cell_traces:
                 parameters_list = []
                 analysed_cells = []
-                for i, (_, _, _, _, _, _, parameters) in enumerate(trace_analysis):
+                for i, (_, _, _, _, _, _, parameters) in enumerate(traces_analysis):
                     if parameters is not None:
                         parameters_list.append(parameters)
                         analysed_cells.append(i)
@@ -303,56 +353,68 @@ def main() -> None:
                     columns=["cell_n", *PARAMETER_NAMES],
                 )
                 parameters_df.to_excel(excel_writer, sheet_name=name, index=False)
+                sheet_written = True
+            if not sheet_written:
+                pd.DataFrame([]).to_excel(excel_writer)
             print("Saved fitted parameters to results/calcium_traces.xlsx!")
 
-        plt_default_hex_codes = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-        for mean_frame, name, trace_analysis in multi_cell_traces:
-            plt.figure()
-            plt.subplot(1, 2, 1)
-            plt.imshow(mean_frame, cmap=colormaps["gray"])
-            for i, (mask, (center_x, center_y), calcium_trace, *_) in enumerate(
-                trace_analysis
-            ):
-                flat_color = np.zeros((*mask.shape, 3), np.float32)
-                flat_color[:] = colors.to_rgb(plt_default_hex_codes[i % 10])
-                mask_as_alpha = mask.astype(np.float32).reshape((*mask.shape, 1)) * 0.5
-                mask_to_show = np.concatenate([flat_color, mask_as_alpha], axis=-1)
+        if not config.quiet:
+            plt_default_hex_codes = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+            for mean_frame, name, traces_analysis in multi_cell_traces:
+                plt.figure()
                 plt.subplot(1, 2, 1)
-                plt.text(center_x, center_y, str(i + 1), color="white", fontsize=12)
-                plt.imshow(mask_to_show)
-                plt.subplot(1, 2, 2)
-                plt.plot(calcium_trace)
-                plt.annotate(
-                    str(i + 1),
-                    (calcium_trace.size, calcium_trace[-1]),
-                    color=plt_default_hex_codes[i % 10],
-                )
-            plt.show()
+                plt.imshow(mean_frame, cmap=colormaps["gray"])
+                for i, (mask, (center_x, center_y), calcium_trace, *_) in enumerate(
+                    traces_analysis
+                ):
+                    flat_color = np.zeros((*mask.shape, 3), np.float32)
+                    flat_color[:] = colors.to_rgb(plt_default_hex_codes[i % 10])
+                    mask_as_alpha = (
+                        mask.astype(np.float32).reshape((*mask.shape, 1)) * 0.5
+                    )
+                    mask_to_show = np.concatenate([flat_color, mask_as_alpha], axis=-1)
+                    plt.subplot(1, 2, 1)
+                    plt.text(center_x, center_y, str(i + 1), color="white", fontsize=12)
+                    plt.imshow(mask_to_show)
+                    plt.subplot(1, 2, 2)
+                    plt.plot(calcium_trace)
+                    plt.annotate(
+                        str(i + 1),
+                        (calcium_trace.size, calcium_trace[-1]),
+                        color=plt_default_hex_codes[i % 10],
+                    )
+                plt.show()
 
-            n_columns = ceil(sqrt(len(trace_analysis)))
-            n_rows = ceil(len(trace_analysis) / n_columns)
+                n_columns = ceil(sqrt(len(traces_analysis)))
+                n_rows = ceil(len(traces_analysis) / n_columns)
 
-            for i, (_, _, calcium_trace, *_) in enumerate(trace_analysis):
-                plt.subplot(n_rows, n_columns, i + 1)
-                plt.title(f"Cell {i + 1}")
-                plt.plot(calcium_trace)
-            plt.tight_layout()
-            plt.show()
-
-            for i, (_, _, _, corrected_trace, mean_beat, beat_segments, _) in enumerate(
-                trace_analysis
-            ):
-                if beat_segments is not None:
-                    min_length = inf
-                    for start, end in beat_segments:
-                        min_length = min(min_length, end - start)
+                for i, (_, _, calcium_trace, *_) in enumerate(traces_analysis):
                     plt.subplot(n_rows, n_columns, i + 1)
                     plt.title(f"Cell {i + 1}")
-                    for start, _ in beat_segments:
-                        plt.plot(corrected_trace[start : start + min_length])
-                    plt.plot(mean_beat, "k")
-            plt.tight_layout()
-            plt.show()
+                    plt.plot(calcium_trace)
+                plt.tight_layout()
+                plt.show()
+
+                for i, (
+                    _,
+                    _,
+                    _,
+                    corrected_trace,
+                    mean_beat,
+                    beat_segments,
+                    _,
+                ) in enumerate(traces_analysis):
+                    if beat_segments is not None:
+                        min_length = inf
+                        for start, end in beat_segments:
+                            min_length = min(min_length, end - start)
+                        plt.subplot(n_rows, n_columns, i + 1)
+                        plt.title(f"Cell {i + 1}")
+                        for start, _ in beat_segments:
+                            plt.plot(corrected_trace[start : start + min_length])
+                        plt.plot(mean_beat, "k")
+                plt.tight_layout()
+                plt.show()
 
     return
 

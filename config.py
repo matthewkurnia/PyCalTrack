@@ -11,5 +11,6 @@ pacing_frequency = 0.5
 beginning_frames_removed = 0
 max_pacing_deviation = 0.1
 good_snr = True
+quiet = True
 
 videos_directory = "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/multi_cell"
