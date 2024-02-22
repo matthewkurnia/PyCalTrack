@@ -23,15 +23,6 @@ from core.masking import (
 from core.reader import get_video_frames, post_read, pre_read
 import config
 
-PATH_ND2_TEST = (
-    "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/"
-    "03-10-2022_R92Q_het_P60_24hr_mava_Pheno_026.nd2"
-)
-PATH_VSI_TEST = (
-    "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/benchmark/Process_2501.vsi"
-)
-PATH_MULTICELL_TIF_TEST = "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/video1.tif"
-
 PARAMETER_NAMES = [
     "baseline",
     "peak / baseline",
@@ -85,16 +76,31 @@ def _get_name_from_path(path: str) -> str:
     return path[len(config.videos_directory) + 1 :].replace("/", "-")
 
 
+def _get_mean_beat(
+    trace: npt.NDArray, beat_segments: list[Tuple[int, int]]
+) -> npt.NDArray:
+    min_length = inf
+    for start, end in beat_segments:
+        min_length = min(min_length, end - start)
+    stacked_beats = np.stack(
+        [trace[start : start + min_length] for start, _ in beat_segments]
+    )
+    mean_beat = np.mean(stacked_beats, axis=0)
+    return mean_beat
+
+
 def main() -> None:
+    # Make results folder.
     if not os.path.exists("results"):
         os.mkdir("results")
 
+    # Get paths to videos.
     video_paths = _get_paths(config.videos_directory)
-
     if len(video_paths) == 0:
         print(f"{config.videos_directory} is empty, aborting.")
         return
 
+    # Get video data.
     videos = _get_videos(video_paths)
 
     if config.usage == config.Usage.SINGLE_CELL:
@@ -102,35 +108,79 @@ def main() -> None:
         n_success = 0
 
         for video_frames, path in videos:
-            mask = get_mask_single_cell(video_frames)
-            calcium_trace = get_calcium_trace(video_frames, mask)
-            ignored_trace = calcium_trace[: config.beginning_frames_removed]
-            analysed_trace = calcium_trace[config.beginning_frames_removed :]
+            analysed_frames = video_frames[config.beginning_frames_removed :]
+            mask = get_mask_single_cell(analysed_frames)
+            calcium_trace = get_calcium_trace(analysed_frames, mask)
+            # ignored_trace = calcium_trace[: config.beginning_frames_removed]
+            # analysed_trace = calcium_trace[config.beginning_frames_removed :]
             beat_segments = beat_segmentation(
-                analysed_trace,
+                calcium_trace,
                 config.acquisition_frequency,
                 config.pacing_frequency,
                 config.max_pacing_deviation,
             )
             if beat_segments is not None:
                 corrected_trace = photo_bleach_correction(
-                    analysed_trace,
+                    calcium_trace,
                     beat_segments,
                     config.acquisition_frequency,
                     config.pacing_frequency,
                 )
                 n_success += 1
+                if config.good_snr:
+                    parameters_list = []
+                    for start, end in beat_segments:
+                        parameters = get_parameters(
+                            corrected_trace[start:end],
+                            config.acquisition_frequency,
+                            config.pacing_frequency,
+                        )
+                        parameters_list.append(parameters)
+                else:
+                    mean_beat = _get_mean_beat(corrected_trace, beat_segments)
+                    parameters = get_parameters(
+                        mean_beat,
+                        config.acquisition_frequency,
+                        config.pacing_frequency,
+                    )
+                    parameters_list = [parameters]
             else:
                 corrected_trace = None
+                parameters_list = None
 
             single_cell_traces.append(
                 (
                     _get_name_from_path(path),
-                    analysed_trace,
+                    calcium_trace,
                     corrected_trace,
                     beat_segments,
+                    parameters_list,
                 )
             )
+
+        # Save traces to file.
+        with pd.ExcelWriter("results/calcium_traces.xlsx") as excel_writer:
+            for name, _, corrected_trace, beat_segments, _ in single_cell_traces:
+                if beat_segments is not None:
+                    individual_beats = [
+                        corrected_trace[start:end] for start, end in beat_segments
+                    ]
+                    individual_beats_df = pd.DataFrame(data=zip(*individual_beats))
+                    individual_beats_df.to_excel(
+                        excel_writer, sheet_name=name, index=False, header=False
+                    )
+            print("Saved traces to results/calcium_traces.xlsx!")
+
+        # Save fitted parameters to file.
+        with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
+            for name, _, _, _, parameters_list in single_cell_traces:
+                if parameters_list is not None:
+                    parameters_df = pd.DataFrame(
+                        data=parameters_list,
+                        columns=PARAMETER_NAMES,
+                    )
+                    parameters_df.to_excel(excel_writer, sheet_name=name, index=False)
+            print("Saved fitted parameters to results/calcium_traces.xlsx!")
 
         fig, big_axes = plt.subplots(nrows=1, ncols=3)
         fig.tight_layout()
@@ -144,7 +194,13 @@ def main() -> None:
         n_rows = max(len(videos) - n_success, n_success)
         i_successful = 0
         i_failed = 0
-        for name, original_trace, corrected_trace, beat_segments in single_cell_traces:
+        for (
+            name,
+            original_trace,
+            corrected_trace,
+            beat_segments,
+            _,
+        ) in single_cell_traces:
             successful = beat_segments is not None
             if successful:
                 ax = fig.add_subplot(n_rows, 3, i_successful * 3 + 1)
@@ -162,75 +218,109 @@ def main() -> None:
 
         plt.tight_layout(pad=0.6)
         plt.show()
-
-        with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
-            for (
-                name,
-                original_trace,
-                corrected_trace,
-                beat_segments,
-            ) in single_cell_traces:
-                if beat_segments is not None:
-                    if config.good_snr:
-                        parameters_list = []
-                        for start, end in beat_segments:
-                            parameters = get_parameters(
-                                corrected_trace[start:end],
-                                config.acquisition_frequency,
-                                config.pacing_frequency,
-                            )
-                            parameters_list.append(parameters)
-                        parameters_list_df = pd.DataFrame(
-                            data=parameters_list,
-                            columns=PARAMETER_NAMES,
-                        )
-                        parameters_list_df.to_excel(
-                            excel_writer, sheet_name=name, index=False
-                        )
-                    else:
-                        min_length = inf
-                        for start, end in beat_segments:
-                            min_length = min(min_length, end - start)
-                        stacked_beats = np.stack(
-                            [
-                                corrected_trace[start : start + min_length]
-                                for start, _ in beat_segments
-                            ]
-                        )
-                        mean_beat = np.mean(stacked_beats, axis=0)
-                        parameters = get_parameters(
-                            mean_beat,
-                            config.acquisition_frequency,
-                            config.pacing_frequency,
-                        )
-                        parameters_df = pd.DataFrame(
-                            data=[parameters],
-                            columns=PARAMETER_NAMES,
-                        )
-                        parameters_df.to_excel(
-                            excel_writer, sheet_name=name, index=False
-                        )
     else:
-        plt_default_hex_codes = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        multi_cell_traces = []
         for video_frames, path in videos:
-            masks = get_mask_multi_cell(video_frames)
+            analysed_frames = video_frames[config.beginning_frames_removed :]
+            masks = get_mask_multi_cell(analysed_frames)
+            calcium_traces = [
+                get_calcium_trace(analysed_frames, mask) for mask, _ in masks
+            ]
+            trace_analysis = []
+            for mask, centre in masks:
+                calcium_trace = get_calcium_trace(video_frames, mask)
+                beat_segments = beat_segmentation(
+                    calcium_trace,
+                    config.acquisition_frequency,
+                    config.pacing_frequency,
+                    config.max_pacing_deviation,
+                )
+                if beat_segments is not None:
+                    corrected_trace = photo_bleach_correction(
+                        calcium_trace,
+                        beat_segments,
+                        config.acquisition_frequency,
+                        config.pacing_frequency,
+                    )
+                    mean_beat = _get_mean_beat(corrected_trace, beat_segments)
+                    parameters = get_parameters(
+                        mean_beat, config.acquisition_frequency, config.pacing_frequency
+                    )
+                else:
+                    corrected_trace = None
+                    mean_beat = None
+                    parameters = None
+                trace_analysis.append(
+                    (
+                        mask,
+                        centre,
+                        calcium_trace,
+                        corrected_trace,
+                        mean_beat,
+                        beat_segments,
+                        parameters,
+                    )
+                )
+            multi_cell_traces.append(
+                (
+                    np.mean(video_frames, axis=0),
+                    _get_name_from_path(path),
+                    trace_analysis,
+                )
+            )
+
+        # Save traces to file.
+        with pd.ExcelWriter("results/calcium_traces.xlsx") as excel_writer:
+            for mean_frame, name, trace_analysis in multi_cell_traces:
+                mean_beats = []
+                analysed_cells = []
+                ignored_cells = []
+                for i, (_, _, _, _, mean_beat, _, _) in enumerate(trace_analysis):
+                    if mean_beat is not None:
+                        mean_beats.append(mean_beat)
+                        analysed_cells.append(i)
+                mean_beats_df = pd.DataFrame(
+                    data=zip(*mean_beats),
+                    columns=[f"Cell {i + 1}" for i in analysed_cells],
+                )
+                mean_beats_df.to_excel(excel_writer, sheet_name=name, index=False)
+            print("Saved traces to results.calcium_traces.xlsx!")
+
+        # Save fitted parameters to file.
+        with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
+            for mean_frame, name, trace_analysis in multi_cell_traces:
+                parameters_list = []
+                analysed_cells = []
+                for i, (_, _, _, _, _, _, parameters) in enumerate(trace_analysis):
+                    if parameters is not None:
+                        parameters_list.append(parameters)
+                        analysed_cells.append(i)
+                parameters_df = pd.DataFrame(
+                    data=[
+                        [i + 1, *parameters]
+                        for i, parameters in zip(analysed_cells, parameters_list)
+                    ],
+                    columns=["cell_n", *PARAMETER_NAMES],
+                )
+                parameters_df.to_excel(excel_writer, sheet_name=name, index=False)
+            print("Saved fitted parameters to results/calcium_traces.xlsx!")
+
+        plt_default_hex_codes = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        for mean_frame, name, trace_analysis in multi_cell_traces:
             plt.figure()
             plt.subplot(1, 2, 1)
-            plt.imshow(np.mean(video_frames, axis=0), cmap=colormaps["gray"])
-            for i, (mask, (center_x, center_y)) in enumerate(masks):
+            plt.imshow(mean_frame, cmap=colormaps["gray"])
+            for i, (mask, (center_x, center_y), calcium_trace, *_) in enumerate(
+                trace_analysis
+            ):
                 flat_color = np.zeros((*mask.shape, 3), np.float32)
                 flat_color[:] = colors.to_rgb(plt_default_hex_codes[i % 10])
                 mask_as_alpha = mask.astype(np.float32).reshape((*mask.shape, 1)) * 0.5
                 mask_to_show = np.concatenate([flat_color, mask_as_alpha], axis=-1)
+                plt.subplot(1, 2, 1)
                 plt.text(center_x, center_y, str(i + 1), color="white", fontsize=12)
                 plt.imshow(mask_to_show)
-
-            calcium_traces = []
-
-            plt.subplot(1, 2, 2)
-            for i, (mask, _) in enumerate(masks):
-                calcium_trace = get_calcium_trace(video_frames, mask)
-                calcium_traces.append(calcium_trace)
+                plt.subplot(1, 2, 2)
                 plt.plot(calcium_trace)
                 plt.annotate(
                     str(i + 1),
@@ -239,117 +329,32 @@ def main() -> None:
                 )
             plt.show()
 
-            n_columns = ceil(sqrt(len(calcium_traces)))
-            n_rows = ceil(len(calcium_traces) / n_columns)
-            for i, trace in enumerate(calcium_traces):
+            n_columns = ceil(sqrt(len(trace_analysis)))
+            n_rows = ceil(len(trace_analysis) / n_columns)
+
+            for i, (_, _, calcium_trace, *_) in enumerate(trace_analysis):
                 plt.subplot(n_rows, n_columns, i + 1)
                 plt.title(f"Cell {i + 1}")
-                plt.plot(trace)
+                plt.plot(calcium_trace)
             plt.tight_layout()
             plt.show()
 
-            name = _get_name_from_path(path)
-            parameters_list = []
-            for i, trace in enumerate(calcium_traces):
-                beat_segments = beat_segmentation(
-                    trace,
-                    config.acquisition_frequency,
-                    config.pacing_frequency,
-                    config.max_pacing_deviation,
-                )
+            for i, (_, _, _, corrected_trace, mean_beat, beat_segments, _) in enumerate(
+                trace_analysis
+            ):
                 if beat_segments is not None:
                     min_length = inf
                     for start, end in beat_segments:
                         min_length = min(min_length, end - start)
-                    stacked_beats = np.stack(
-                        [
-                            trace[start : start + min_length]
-                            for start, _ in beat_segments
-                        ]
-                    )
-                    mean_beat = np.mean(stacked_beats, axis=0)
-                    parameters = get_parameters(
-                        mean_beat,
-                        config.acquisition_frequency,
-                        config.pacing_frequency,
-                    )
-                    parameters_list.append([i + 1, *parameters])
-
-                    # for i, trace in enumerate(calcium_traces):
                     plt.subplot(n_rows, n_columns, i + 1)
                     plt.title(f"Cell {i + 1}")
                     for start, _ in beat_segments:
-                        plt.plot(trace[start : start + min_length])
+                        plt.plot(corrected_trace[start : start + min_length])
                     plt.plot(mean_beat, "k")
             plt.tight_layout()
             plt.show()
 
-            with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
-                # for parameters in parameters_list:
-                parameters_df = pd.DataFrame(
-                    data=parameters_list,
-                    columns=["cell_n", *PARAMETER_NAMES],
-                )
-                parameters_df.to_excel(excel_writer, sheet_name=name, index=False)
-
     return
-
-    pre_read()
-    frames = get_video_frames(
-        "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/notworkinglol/Process_2888.vsi"
-    )
-    post_read()
-    if frames is None:
-        print("AAAAAAAAAAAAAAAAAAAA")
-        return
-    f, axarr = plt.subplots(1, 2)
-    # axarr[0, 0].imshow(image_datas[0])
-    # axarr[0, 1].imshow(image_datas[1])
-    mask = get_mask_single_cell(frames)
-    my_mask = mask / 255
-    axarr[0].imshow(mask, cmap=colormaps["gray"])
-    mask = loadmat("/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/FinalMask.mat")[
-        "FinalMask"
-    ]
-    axarr[1].imshow(mask, cmap=colormaps["gray"])
-    # print(np.max(my_mask - mask))
-    # print(np.max(np.mean(frames, axis=0) - np.mean(mask / 65535, axis=2)))
-    plt.show()
-
-    """
-    frames = get_video_frames(PATH_VSI_TEST)
-    if frames is None:
-        return
-
-    mask = get_mask_single_cell(frames)
-    # plt.imshow(mask, cmap=colormaps["gray"])
-    # plt.show()
-
-    calcium_trace = get_calcium_trace(frames, mask)
-
-    # wow this indexing is really bad
-    calcium_trace_matlab = loadmat(
-        "sample_videos/benchmark/calcium_analysis/Calcium_Traces.mat"
-    )["Calcium_Traces"][0, 0][0][:, 0]
-
-    norm = np.linalg.norm(calcium_trace * 65535 - calcium_trace_matlab)
-    print(f"|py - ml| / |ml| = {norm / np.linalg.norm(calcium_trace_matlab)}")
-
-    plt.plot(calcium_trace * 65535, label="python")
-    plt.plot(calcium_trace_matlab, label="matlab")
-    plt.show()
-
-    # TODO: Based on the figure, would you like to remove any cell?
-
-    # TODO: Do you need to apply photo bleach correction?
-
-    beat_segments = beat_segmentation(calcium_trace[1:], 50, 1, 0.1)
-    print(beat_segments)
-
-    left, right = beat_segments[0]
-
-    get_parameters(calcium_trace[left:right], 50, 1)
-    """
 
 
 if __name__ == "__main__":
