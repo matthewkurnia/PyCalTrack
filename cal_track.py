@@ -247,9 +247,6 @@ def main() -> None:
         for video_frames, path in videos:
             analysed_frames = video_frames[config.beginning_frames_removed :]
             masks = get_mask_multi_cell(analysed_frames)
-            calcium_traces = [
-                get_calcium_trace(analysed_frames, mask) for mask, _ in masks
-            ]
             traces_analysis = []
             for mask, centre in masks:
                 calcium_trace = get_calcium_trace(video_frames, mask)
@@ -361,7 +358,7 @@ def main() -> None:
         if not config.quiet:
             plt_default_hex_codes = plt.rcParams["axes.prop_cycle"].by_key()["color"]
             for mean_frame, name, traces_analysis in multi_cell_traces:
-                plt.figure()
+                plt.figure(f"{name} (masking)")
                 plt.subplot(1, 2, 1)
                 plt.imshow(mean_frame, cmap=colormaps["gray"])
                 for i, (mask, (center_x, center_y), calcium_trace, *_) in enumerate(
@@ -383,18 +380,18 @@ def main() -> None:
                         (calcium_trace.size, calcium_trace[-1]),
                         color=plt_default_hex_codes[i % 10],
                     )
-                plt.show()
 
                 n_columns = ceil(sqrt(len(traces_analysis)))
                 n_rows = ceil(len(traces_analysis) / n_columns)
 
+                plt.figure(f"{name} (extracted traces)")
                 for i, (_, _, calcium_trace, *_) in enumerate(traces_analysis):
                     plt.subplot(n_rows, n_columns, i + 1)
                     plt.title(f"Cell {i + 1}")
                     plt.plot(calcium_trace)
                 plt.tight_layout()
-                plt.show()
 
+                plt.figure(f"{name} (averaged beats)")
                 for i, (
                     _,
                     _,
@@ -414,8 +411,8 @@ def main() -> None:
                             plt.plot(corrected_trace[start : start + min_length])
                         plt.plot(mean_beat, "k")
                 plt.tight_layout()
-                plt.show()
 
+                plt.show()
     return
 
 
