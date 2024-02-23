@@ -1,5 +1,5 @@
 import config
-from math import ceil
+from math import ceil, floor
 from typing import Tuple, Union
 from matplotlib import pyplot as plt
 
@@ -7,7 +7,12 @@ import numpy as np
 import numpy.typing as npt
 from scipy.signal import find_peaks, peak_prominences
 from scipy.optimize import curve_fit
-from core.flags import HANDLE_LAST_TRANSIENT, INTERPOLATE_INTERCEPT
+from core.flags import (
+    EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
+    HANDLE_LAST_TRANSIENT,
+    INTERPOLATE_INTERCEPT,
+    USE_MILLISECOND,
+)
 from core.utils import moving_average
 
 
@@ -40,6 +45,7 @@ def beat_segmentation(
     acquisition_frequency: float,
     pacing_frequency: float,
     max_pacing_deviation: float,
+    prune_bad_traces: bool = False,
 ) -> Union[list[Tuple[int, int]], None]:
     # Handle acquisition frequency > 100.
     calcium_trace_original = calcium_trace
@@ -113,7 +119,17 @@ def beat_segmentation(
             segmented_beat = calcium_trace_original[:end]
 
         segmented_beats.append(segmented_beat)
-        beat_segments.append((start, end))
+
+        peak = np.max(segmented_beat)
+        baseline_duration = ceil((end - start) * BASELINE_WINDOW)
+        baseline = np.mean(calcium_trace[end - baseline_duration : end]).item()
+        magnitude = peak - baseline
+        adjusted_baseline = baseline + BASELINE_INCREASE * magnitude
+        attack_intercept = _get_intercept(segmented_beat, adjusted_baseline)
+        decay_intercept = _get_intercept(segmented_beat, adjusted_baseline, True)
+
+        if attack_intercept != decay_intercept or not prune_bad_traces:
+            beat_segments.append((start, end))
 
     # Handle last transient special cases.
     if HANDLE_LAST_TRANSIENT:
@@ -183,9 +199,14 @@ def photo_bleach_correction(
         ys = np.append(ys, segmented_beat[baseline_values_mask])
 
     # we are trying to fit a polynomial of degree 2
-    polynomial = lambda x, a, b, c: a * x * x + b * x + c
-    parameters, *_ = curve_fit(polynomial, xs, ys, p0=[1, 1, baseline])
-    trend = np.polyval(parameters, np.arange(calcium_trace.size))
+    if EXPONENTIAL_PHOTO_BLEACH_CORRECTION:
+        exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
+        [a, b, c], *_ = curve_fit(exponential, xs, ys, p0=[baseline, 0, 0])
+        trend = np.fromfunction(lambda x: exponential(x, a, b, c), calcium_trace.shape)
+    else:
+        polynomial = lambda x, a, b, c: a * x * x + b * x + c
+        parameters, *_ = curve_fit(polynomial, xs, ys, p0=[1, 1, baseline])
+        trend = np.polyval(parameters, np.arange(calcium_trace.size))
 
     corrected_trace = calcium_trace - trend + trend[0]
 
@@ -200,7 +221,7 @@ def _get_intercept(values, threshold: float, last: bool = False) -> float:
         i = intersections[index]
         if INTERPOLATE_INTERCEPT and i + 1 < values.size:
             return i + (threshold - values[i]) / (values[i + 1] - values[i])
-    return mask.size if last else 0
+    return -1
 
 
 def get_parameters(
@@ -294,40 +315,28 @@ def get_parameters(
     r_squared = 1 - (ss_res / ss_tot)
     tau = 1 / (b * acquisition_frequency)
 
-    # return [
-    #     tau,
-    #     t_attack,
-    #     t_attack_90,
-    #     t_attack_50,
-    #     t_attack_10,
-    #     t_decay,
-    #     t_decay_90,
-    #     t_decay_50,
-    #     t_decay_10,
-    #     duration,
-    #     duration_90,
-    #     duration_50,
-    #     duration_10,
-    # ]
+    unit_multiplier = 1
+    if USE_MILLISECOND:
+        unit_multiplier = 1000
 
     return [
         baseline,
         np.max(trace) / baseline,
-        duration,
-        duration_90,
-        duration_50,
-        duration_10,
-        t_start,
-        t_end,
-        t_attack,
-        t_attack_10,
-        t_attack_50,
-        t_attack_90,
-        t_decay,
-        t_decay_10,
-        t_decay_50,
-        t_decay_90,
-        tau,
+        duration * unit_multiplier,
+        duration_90 * unit_multiplier,
+        duration_50 * unit_multiplier,
+        duration_10 * unit_multiplier,
+        t_start * unit_multiplier,
+        t_end * unit_multiplier,
+        t_attack * unit_multiplier,
+        t_attack_10 * unit_multiplier,
+        t_attack_50 * unit_multiplier,
+        t_attack_90 * unit_multiplier,
+        t_decay * unit_multiplier,
+        t_decay_10 * unit_multiplier,
+        t_decay_50 * unit_multiplier,
+        t_decay_90 * unit_multiplier,
+        tau * unit_multiplier,
         a,
         c,
         r_squared,

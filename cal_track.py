@@ -126,6 +126,15 @@ def main() -> None:
                     config.acquisition_frequency,
                     config.pacing_frequency,
                 )
+                beat_segments_from_corrected_trace = beat_segmentation(
+                    corrected_trace,
+                    config.acquisition_frequency,
+                    config.pacing_frequency,
+                    config.max_pacing_deviation,
+                    prune_bad_traces=True,
+                )
+                if beat_segments_from_corrected_trace is not None:
+                    beat_segments = beat_segments_from_corrected_trace
                 n_success += 1
                 if config.good_snr:
                     parameters_list = []
@@ -263,6 +272,15 @@ def main() -> None:
                         config.acquisition_frequency,
                         config.pacing_frequency,
                     )
+                    beat_segments_from_corrected_trace = beat_segmentation(
+                        corrected_trace,
+                        config.acquisition_frequency,
+                        config.pacing_frequency,
+                        config.max_pacing_deviation,
+                        prune_bad_traces=True,
+                    )
+                    if beat_segments_from_corrected_trace is not None:
+                        beat_segments = beat_segments_from_corrected_trace
                     mean_beat = _get_mean_beat(corrected_trace, beat_segments)
                     parameters = get_parameters(
                         mean_beat, config.acquisition_frequency, config.pacing_frequency
