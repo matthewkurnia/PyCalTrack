@@ -11,6 +11,7 @@ from core.flags import (
     EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
     HANDLE_LAST_TRANSIENT,
     INTERPOLATE_INTERCEPT,
+    PRUNE_BAD_TRACES,
     USE_MILLISECOND,
 )
 from core.utils import moving_average
@@ -45,7 +46,6 @@ def beat_segmentation(
     acquisition_frequency: float,
     pacing_frequency: float,
     max_pacing_deviation: float,
-    prune_bad_traces: bool = False,
 ) -> Union[list[Tuple[int, int]], None]:
     # Handle acquisition frequency > 100.
     calcium_trace_original = calcium_trace
@@ -120,15 +120,17 @@ def beat_segmentation(
 
         segmented_beats.append(segmented_beat)
 
-        peak = np.max(segmented_beat)
-        baseline_duration = ceil((end - start) * BASELINE_WINDOW)
-        baseline = np.mean(calcium_trace[end - baseline_duration : end]).item()
-        magnitude = peak - baseline
-        adjusted_baseline = baseline + BASELINE_INCREASE * magnitude
-        attack_intercept = _get_intercept(segmented_beat, adjusted_baseline)
-        decay_intercept = _get_intercept(segmented_beat, adjusted_baseline, True)
-
-        if attack_intercept != decay_intercept or not prune_bad_traces:
+        if PRUNE_BAD_TRACES:
+            peak = np.max(segmented_beat)
+            baseline_duration = ceil((end - start) * BASELINE_WINDOW)
+            baseline = np.mean(calcium_trace[end - baseline_duration : end]).item()
+            magnitude = peak - baseline
+            adjusted_baseline = baseline + BASELINE_INCREASE * magnitude
+            attack_intercept = _get_intercept(segmented_beat, adjusted_baseline)
+            decay_intercept = _get_intercept(segmented_beat, adjusted_baseline, True)
+            if attack_intercept != decay_intercept:
+                beat_segments.append((start, end))
+        else:
             beat_segments.append((start, end))
 
     # Handle last transient special cases.
@@ -226,7 +228,7 @@ def _get_intercept(values, threshold: float, last: bool = False) -> float:
 
 def get_parameters(
     trace: npt.NDArray, acquisition_frequency: float, pacing_frequency: float
-) -> list[float]:
+) -> Union[list[float], None]:
     pacing_period = 1 / pacing_frequency
     acquisition_period = 1 / acquisition_frequency
     baseline_duration = ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency)
@@ -305,39 +307,68 @@ def get_parameters(
     duration_50 = t_decay_50 + t_attack - t_attack_50
     duration_10 = t_decay_10 + t_attack - t_attack_90
 
+    values = np.array(
+        [
+            duration,
+            duration_90,
+            duration_50,
+            duration_10,
+            t_start,
+            t_end,
+            t_attack,
+            t_attack_10,
+            t_attack_50,
+            t_attack_90,
+            t_decay,
+            t_decay_10,
+            t_decay_50,
+            t_decay_90,
+        ]
+    )
+    if np.any(values < 0):
+        return None
+
     exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
     xs = np.arange(trace_decay.size)
     ys = trace_decay
-    [a, b, c], *_ = curve_fit(exponential, xs, ys, p0=[trace_decay[0], 0.1, 0])
-    residuals = ys - exponential(xs, a, b, c)
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((ys - np.mean(ys)) ** 2)
-    r_squared = 1 - (ss_res / ss_tot)
-    tau = 1 / (b * acquisition_frequency)
+    try:
+        [a, b, c], *_ = curve_fit(
+            exponential,
+            xs,
+            ys,
+            p0=[trace_decay[0] - trace_decay[-1], 0.1, trace_decay[-1]],
+        )
+        residuals = ys - exponential(xs, a, b, c)
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((ys - np.mean(ys)) ** 2)
+        r_squared = 1 - (ss_res / ss_tot)
+        tau = 1 / (b * acquisition_frequency)
 
-    unit_multiplier = 1
-    if USE_MILLISECOND:
-        unit_multiplier = 1000
+        unit_multiplier = 1
+        if USE_MILLISECOND:
+            unit_multiplier = 1000
 
-    return [
-        baseline,
-        np.max(trace) / baseline,
-        duration * unit_multiplier,
-        duration_90 * unit_multiplier,
-        duration_50 * unit_multiplier,
-        duration_10 * unit_multiplier,
-        t_start * unit_multiplier,
-        t_end * unit_multiplier,
-        t_attack * unit_multiplier,
-        t_attack_10 * unit_multiplier,
-        t_attack_50 * unit_multiplier,
-        t_attack_90 * unit_multiplier,
-        t_decay * unit_multiplier,
-        t_decay_10 * unit_multiplier,
-        t_decay_50 * unit_multiplier,
-        t_decay_90 * unit_multiplier,
-        tau * unit_multiplier,
-        a,
-        c,
-        r_squared,
-    ]
+        return [
+            baseline,
+            np.max(trace) / baseline,
+            duration * unit_multiplier,
+            duration_90 * unit_multiplier,
+            duration_50 * unit_multiplier,
+            duration_10 * unit_multiplier,
+            t_start * unit_multiplier,
+            t_end * unit_multiplier,
+            t_attack * unit_multiplier,
+            t_attack_10 * unit_multiplier,
+            t_attack_50 * unit_multiplier,
+            t_attack_90 * unit_multiplier,
+            t_decay * unit_multiplier,
+            t_decay_10 * unit_multiplier,
+            t_decay_50 * unit_multiplier,
+            t_decay_90 * unit_multiplier,
+            tau * unit_multiplier,
+            a,
+            c,
+            r_squared,
+        ]
+    except:
+        return None
