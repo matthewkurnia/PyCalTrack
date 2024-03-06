@@ -332,7 +332,7 @@ def main() -> None:
             mean_parameters_df.to_excel(excel_writer, index=False)
             print("Saved mean fitted parameters to results/mean_beat_parameters.xlsx")
 
-        # Plot results
+        # Plot results.
         if not config.quiet:
             fig, big_axes = plt.subplots(nrows=1, ncols=3)
             fig.tight_layout()
@@ -372,11 +372,14 @@ def main() -> None:
             plt.show()
     else:
         multi_cell_traces = []
+        irregular_traces = []
+        failed_parameters_traces = []
         for video_frames, path in videos:
+            name = _get_name_from_path(path)
             analysed_frames = video_frames[config.beginning_frames_removed :]
             masks = get_mask_multi_cell(analysed_frames)
             traces_analysis = []
-            for mask, centre in masks:
+            for i, (mask, centre) in enumerate(masks):
                 calcium_trace = get_calcium_trace(video_frames, mask)
                 beat_segments = beat_segmentation(
                     calcium_trace,
@@ -403,7 +406,13 @@ def main() -> None:
                     parameters = get_parameters(
                         mean_beat, config.acquisition_frequency, config.pacing_frequency
                     )
+                    if parameters is None:
+                        failed_parameters_traces.append(
+                            (f"{name}, Cell {i}", mean_beat)
+                        )
+                        parameters = FAILED_PARAMETERS
                 else:
+                    irregular_traces.append((f"{name}, Cell {i}", calcium_trace))
                     corrected_trace = None
                     mean_beat = None
                     parameters = None
@@ -421,13 +430,28 @@ def main() -> None:
             multi_cell_traces.append(
                 (
                     np.mean(video_frames, axis=0),
-                    _get_name_from_path(path),
+                    name,
                     traces_analysis,
                 )
             )
 
-        # Save analysed traces to file.
+        # Save raw traces to file.
         with pd.ExcelWriter("results/calcium_traces.xlsx") as excel_writer:
+            sheet_written = False
+            for *_, name, traces_analysis in multi_cell_traces:
+                traces = [trace for _, _, trace, *_ in traces_analysis]
+                traces_df = pd.DataFrame(
+                    data=zip_longest(*traces),
+                    columns=[f"Cell {i + 1}" for i in range(len(traces_analysis))],
+                )
+                traces_df.to_excel(excel_writer, sheet_name=name, index=False)
+                sheet_written = True
+            if not sheet_written:
+                pd.DataFrame([]).to_excel(excel_writer)
+            print("Saved calcium traces to results/calcium_traces.xlsx!")
+
+        # Save analysed traces to file.
+        with pd.ExcelWriter("results/beat_traces.xlsx") as excel_writer:
             sheet_written = False
             for mean_frame, name, traces_analysis in multi_cell_traces:
                 mean_beats = []
@@ -444,53 +468,57 @@ def main() -> None:
                 sheet_written = True
             if not sheet_written:
                 pd.DataFrame([]).to_excel(excel_writer)
-            print("Saved traces to results.calcium_traces.xlsx!")
-
-        # Save ignored traces to file.
-        with pd.ExcelWriter("results/ignored_traces.xlsx") as excel_writer:
-            sheet_written = False
-            for _, name, traces_analysis in multi_cell_traces:
-                ignored_traces = []
-                ignored_cells = []
-                for i, (_, _, calcium_trace, _, _, beat_segments, _) in enumerate(
-                    traces_analysis
-                ):
-                    if beat_segments is None:
-                        ignored_traces.append(calcium_trace)
-                        ignored_cells.append(i)
-                ignored_traces_df = pd.DataFrame(
-                    data=zip(*ignored_traces),
-                    columns=[f"Cell {i + 1}" for i in ignored_cells],
-                )
-                ignored_traces_df.to_excel(excel_writer, sheet_name=name, index=False)
-                sheet_written = True
-            if not sheet_written:
-                pd.DataFrame([]).to_excel(excel_writer)
-            print("Saved ignored traces to results/ignored_traces.xlsx!")
+            print("Saved beat traces to results/beat_traces.xlsx!")
 
         # Save fitted parameters to file.
         with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
             sheet_written = False
+            parameters_mega_list = []
             for mean_frame, name, traces_analysis in multi_cell_traces:
                 parameters_list = []
-                analysed_cells = []
                 for i, (*_, parameters) in enumerate(traces_analysis):
                     if parameters is not None:
-                        parameters_list.append(parameters)
-                        analysed_cells.append(i)
+                        parameters_mega_list.append([name, i + 1, *parameters])
+                        parameters_list.append([i + 1, *parameters])
                 parameters_df = pd.DataFrame(
-                    data=[
-                        [i + 1, *parameters]
-                        for i, parameters in zip(analysed_cells, parameters_list)
-                    ],
+                    data=parameters_list,
                     columns=["cell_n", *PARAMETER_NAMES],
                 )
                 parameters_df.to_excel(excel_writer, sheet_name=name, index=False)
                 sheet_written = True
+            parameters_mega_list_df = pd.DataFrame(
+                data=parameters_mega_list, columns=["video", "cell_n", *PARAMETER_NAMES]
+            )
+            parameters_mega_list_df.to_excel(
+                excel_writer, sheet_name="combined", index=False
+            )
             if not sheet_written:
                 pd.DataFrame([]).to_excel(excel_writer)
             print("Saved fitted parameters to results/calcium_traces.xlsx!")
 
+        # Save traces with irregular beats.
+        with pd.ExcelWriter("results/calcium_traces_irregular.xlsx") as excel_writer:
+            names = [name for name, _ in irregular_traces]
+            traces = [trace for _, trace in irregular_traces]
+            traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
+            traces_df.to_excel(excel_writer, index=False)
+            print(
+                "Saved traces with irregular beats to results/calcium_traces_irregular.xlsx"
+            )
+
+        # Save traces that failed parameter fitting.
+        with pd.ExcelWriter(
+            "results/calcium_traces_failed_parameters.xlsx"
+        ) as excel_writer:
+            names = [name for name, _ in failed_parameters_traces]
+            traces = [trace for _, trace in failed_parameters_traces]
+            traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
+            traces_df.to_excel(excel_writer, index=False)
+            print(
+                "Saved traces with irregular beats to results/calcium_traces_failed_parameters.xlsx"
+            )
+
+        # Plot results.
         if not config.quiet:
             plt_default_hex_codes = plt.rcParams["axes.prop_cycle"].by_key()["color"]
             for mean_frame, name, traces_analysis in multi_cell_traces:
@@ -550,12 +578,6 @@ def main() -> None:
 
                 plt.show()
 
-    # calcium_traces = loadmat(
-    #     "/home/mkurnia/uni/fyp/PyCalTrack/sample_videos/notworkinglol/Calcium_Traces.mat"
-    # )["Calcium_Traces"][0][0][0]
-    # # print(calcium_traces)
-    # plt.plot(calcium_traces)
-    # plt.show()
     return
 
 
