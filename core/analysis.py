@@ -247,6 +247,13 @@ def get_parameters(
     adjusted_baseline = baseline + BASELINE_INCREASE * magnitude
     adjusted_magnitude = peak - adjusted_baseline
 
+    # Get signal to noise ratio.
+    start_index = floor(_get_intercept(trace_attack, adjusted_baseline, last=True))
+    end_index = floor(_get_intercept(trace_decay, adjusted_baseline)) + peak_location
+    transient_trace = trace[start_index:end_index]
+    baseline_trace = np.concatenate((trace[:start_index], trace[end_index:]))
+    snr = transient_trace.mean() / baseline_trace.std()
+
     t_start = (
         _get_intercept(trace_attack, adjusted_baseline, last=True) * acquisition_period
     )
@@ -281,25 +288,18 @@ def get_parameters(
     )
 
     # Get decay time.
-    t_decay = (
-        _get_intercept(trace_decay, adjusted_baseline)
-        * acquisition_period
-        # + time_to_peak
-    )
+    t_decay = _get_intercept(trace_decay, adjusted_baseline) * acquisition_period
     t_decay_10 = (
         _get_intercept(trace_decay, adjusted_baseline + 0.9 * adjusted_magnitude)
         * acquisition_period
-        # + time_to_peak
     )
     t_decay_50 = (
         _get_intercept(trace_decay, adjusted_baseline + 0.5 * adjusted_magnitude)
         * acquisition_period
-        # + time_to_peak
     )
     t_decay_90 = (
         _get_intercept(trace_decay, adjusted_baseline + 0.1 * adjusted_magnitude)
         * acquisition_period
-        # + time_to_peak
     )
 
     duration = t_attack + t_decay
@@ -328,10 +328,10 @@ def get_parameters(
     if np.any(values < 0):
         return None
 
-    exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
-    xs = np.arange(trace_decay.size)
-    ys = trace_decay
     try:
+        exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
+        xs = np.arange(trace_decay.size)
+        ys = trace_decay
         [a, b, c], *_ = curve_fit(
             exponential,
             xs,
@@ -369,6 +369,7 @@ def get_parameters(
             a,
             c,
             r_squared,
+            snr,
         ]
     except:
         return None

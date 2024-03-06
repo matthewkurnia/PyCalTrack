@@ -47,9 +47,10 @@ PARAMETER_NAMES = [
     "a",
     "c",
     "r_squared",
+    "snr",
 ]
 
-FAILED_PARAMETERS = [float("nan")] * 20
+FAILED_PARAMETERS = [float("nan")] * 21
 
 
 def _get_paths(path_to_directory: str) -> list[str]:
