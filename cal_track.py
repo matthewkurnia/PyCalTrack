@@ -1,4 +1,4 @@
-from __future__ import annotations # Required for windows version to run.
+from __future__ import annotations  # Required for windows version to run.
 from math import ceil, inf, sqrt, isnan
 from typing import Tuple
 import numpy as np
@@ -80,6 +80,8 @@ def _get_videos(paths: list[str]) -> list[Tuple[npt.NDArray, str]]:
 
 
 def _get_name_from_path(path: str) -> str:
+    if config.videos_directory[-1] == "/":
+        return path[len(config.videos_directory) :].replace("/", "-")
     return path[len(config.videos_directory) + 1 :].replace("/", "-")
 
 
