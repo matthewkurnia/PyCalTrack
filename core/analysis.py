@@ -1,4 +1,4 @@
-from __future__ import annotations # Required for windows version to run.
+from __future__ import annotations  # Required for windows version to run.
 import config
 from math import ceil, floor
 from typing import Tuple, Union
@@ -248,21 +248,21 @@ def get_parameters(
     adjusted_baseline = baseline + BASELINE_INCREASE * magnitude
     adjusted_magnitude = peak - adjusted_baseline
 
+    attack_intercept = _get_intercept(trace_attack, adjusted_baseline, last=True)
+    decay_intercept = _get_intercept(trace_decay, adjusted_baseline)
+    if attack_intercept < 0 or decay_intercept < 0:
+        return None
+
     # Get signal to noise ratio.
-    start_index = floor(_get_intercept(trace_attack, adjusted_baseline, last=True))
-    end_index = floor(_get_intercept(trace_decay, adjusted_baseline)) + peak_location
+    start_index = floor(attack_intercept)
+    end_index = floor(decay_intercept) + peak_location
     transient_trace = trace[start_index:end_index]
     baseline_trace = np.concatenate((trace[:start_index], trace[end_index:]))
     snr = transient_trace.mean() / baseline_trace.std()
 
-    t_start = (
-        _get_intercept(trace_attack, adjusted_baseline, last=True) * acquisition_period
-    )
+    t_start = attack_intercept * acquisition_period
 
-    t_end = (
-        _get_intercept(trace_decay, adjusted_baseline) * acquisition_period
-        + time_to_peak
-    )
+    t_end = decay_intercept * acquisition_period + time_to_peak
 
     # Get attack time.
     t_attack = time_to_peak - t_start
