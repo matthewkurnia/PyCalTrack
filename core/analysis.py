@@ -1,3 +1,4 @@
+from __future__ import annotations # Required for windows version to run.
 import config
 from math import ceil, floor
 from typing import Tuple, Union

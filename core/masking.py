@@ -1,9 +1,9 @@
+from __future__ import annotations # Required for windows version to run.
 from math import ceil
 from typing import Tuple
 import cv2
 import numpy as np
 import numpy.typing as npt
-
 
 def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
     # Assuming that the each pixel in every frame have range [0, 1].

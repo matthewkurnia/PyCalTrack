@@ -1,3 +1,4 @@
+from __future__ import annotations # Required for windows version to run.
 import pathlib
 from typing import Union
 
@@ -96,15 +97,14 @@ def get_video_frames(path: str, nd2_calcium_layer_index=0) -> Union[npt.NDArray,
     result = None
 
     try:
-        match format:
-            case ".nd2":
-                result = _get_video_frames_nd2(path, nd2_calcium_layer_index)
-            case ".vsi":
-                result = _get_video_frames_vsi(path)
-            case ".tif" | ".tiff":
-                result = _get_video_frames_multipage(path)
-            case _:
-                result = _get_video_frames_other(path)
+        if format == ".nd2":
+            result = _get_video_frames_nd2(path, nd2_calcium_layer_index)
+        elif format == ".vsi":
+            result = _get_video_frames_vsi(path)
+        elif format == ".tif" | ".tiff":
+            result = _get_video_frames_multipage(path)
+        else:
+            result = _get_video_frames_other(path)
     except FileNotFoundError:
         print(f"File with path {path} cannot be found, ignoring...")
     except:

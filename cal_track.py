@@ -1,3 +1,4 @@
+from __future__ import annotations # Required for windows version to run.
 from math import ceil, inf, sqrt, isnan
 from typing import Tuple
 import numpy as np
