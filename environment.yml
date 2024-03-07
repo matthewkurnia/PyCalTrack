@@ -14,6 +14,5 @@ dependencies:
   - scipy=1.11.2
   - seaborn=0.12.2
   - mypy=1.7.0 # for development purposes
-  - isort=5.12.0
-  - python-bioformats
-  - pillow=10.0.0
+  - isort=5.12.0 # for development purposes
+  - python-bioformats=4.0.7

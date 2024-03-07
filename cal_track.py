@@ -320,8 +320,15 @@ def main() -> None:
                 [
                     name,
                     *[
-                        mean(filter(lambda x: not isnan(x), values))
-                        for values in zip(*parameters_list)
+                        (
+                            mean(filtered_values)
+                            if len(filtered_values) > 0
+                            else float("nan")
+                        )
+                        for filtered_values in (
+                            list(filter(lambda x: not isnan(x), values))
+                            for values in zip(*parameters_list)
+                        )
                     ],
                 ]
                 for name, *_, parameters_list in single_cell_traces
