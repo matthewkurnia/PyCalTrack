@@ -1,0 +1,17 @@
+name: PyCalTrack
+channels:
+  - defaults
+  - conda-forge
+  - bioconda
+  - zacsimile
+dependencies:
+  - python=3.7.16
+  - matplotlib=3.5.3
+  - nd2=0.7.3
+  - numpy=1.21.5
+  - opencv=4.6.0
+  - pandas=1.3.5
+  - openpyxl=3.0.10
+  - scipy=1.7.3
+  - seaborn=0.12.2
+  - python-bioformats=4.0.0
