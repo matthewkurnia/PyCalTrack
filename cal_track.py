@@ -1,6 +1,6 @@
 from __future__ import annotations  # Required for windows version to run.
 from math import ceil, inf, sqrt, isnan
-from typing import Tuple
+from typing import Tuple, Iterator
 import numpy as np
 import os
 import glob
@@ -68,15 +68,14 @@ def _get_paths(path_to_directory: str) -> list[str]:
         return []
 
 
-def _get_videos(paths: list[str]) -> list[Tuple[npt.NDArray, str]]:
+def _get_videos(paths: list[str]) -> Iterator[Tuple[npt.NDArray, str]]:
     pre_read()
-    result = []
     for path in paths:
+        print(f"Reading {path}...")
         video_frames = get_video_frames(path)
         if video_frames is not None:
-            result.append((video_frames, path))
+            yield (video_frames, path)
     post_read()
-    return result
 
 
 def _get_name_from_path(path: str) -> str:
@@ -125,7 +124,11 @@ def main() -> None:
         for video_frames, path in videos:
             name = _get_name_from_path(path)
             analysed_frames = video_frames[config.beginning_frames_removed :]
-            mask = get_mask_single_cell(analysed_frames)
+            try:
+                mask = get_mask_single_cell(analysed_frames)
+            except:
+                print(f"Masking failed for {path}, skipping.")
+                continue
             calcium_trace = get_calcium_trace(analysed_frames, mask)
             # ignored_trace = calcium_trace[: config.beginning_frames_removed]
             # analysed_trace = calcium_trace[config.beginning_frames_removed :]
@@ -136,20 +139,23 @@ def main() -> None:
                 config.max_pacing_deviation,
             )
             if beat_segments is not None:
-                corrected_trace = photo_bleach_correction(
-                    calcium_trace,
-                    beat_segments,
-                    config.acquisition_frequency,
-                    config.pacing_frequency,
-                )
-                beat_segments_from_corrected_trace = beat_segmentation(
-                    corrected_trace,
-                    config.acquisition_frequency,
-                    config.pacing_frequency,
-                    config.max_pacing_deviation,
-                )
-                if beat_segments_from_corrected_trace is not None:
-                    beat_segments = beat_segments_from_corrected_trace
+                if config.apply_photo_bleach_correction:
+                    corrected_trace = photo_bleach_correction(
+                        calcium_trace,
+                        beat_segments,
+                        config.acquisition_frequency,
+                        config.pacing_frequency,
+                    )
+                    beat_segments_from_corrected_trace = beat_segmentation(
+                        corrected_trace,
+                        config.acquisition_frequency,
+                        config.pacing_frequency,
+                        config.max_pacing_deviation,
+                    )
+                    if beat_segments_from_corrected_trace is not None:
+                        beat_segments = beat_segments_from_corrected_trace
+                else:
+                    corrected_trace = calcium_trace
                 n_success += 1
                 if config.good_snr:
                     parameters_list = []
@@ -388,7 +394,11 @@ def main() -> None:
         for video_frames, path in videos:
             name = _get_name_from_path(path)
             analysed_frames = video_frames[config.beginning_frames_removed :]
-            masks = get_mask_multi_cell(analysed_frames)
+            try:
+                masks = get_mask_multi_cell(analysed_frames)
+            except:
+                print(f"Masking failed for {path}, skipping.")
+                continue
             traces_analysis = []
             for i, (mask, centre) in enumerate(masks):
                 calcium_trace = get_calcium_trace(video_frames, mask)
@@ -399,20 +409,23 @@ def main() -> None:
                     config.max_pacing_deviation,
                 )
                 if beat_segments is not None:
-                    corrected_trace = photo_bleach_correction(
-                        calcium_trace,
-                        beat_segments,
-                        config.acquisition_frequency,
-                        config.pacing_frequency,
-                    )
-                    beat_segments_from_corrected_trace = beat_segmentation(
-                        corrected_trace,
-                        config.acquisition_frequency,
-                        config.pacing_frequency,
-                        config.max_pacing_deviation,
-                    )
-                    if beat_segments_from_corrected_trace is not None:
-                        beat_segments = beat_segments_from_corrected_trace
+                    if config.apply_photo_bleach_correction:
+                        corrected_trace = photo_bleach_correction(
+                            calcium_trace,
+                            beat_segments,
+                            config.acquisition_frequency,
+                            config.pacing_frequency,
+                        )
+                        beat_segments_from_corrected_trace = beat_segmentation(
+                            corrected_trace,
+                            config.acquisition_frequency,
+                            config.pacing_frequency,
+                            config.max_pacing_deviation,
+                        )
+                        if beat_segments_from_corrected_trace is not None:
+                            beat_segments = beat_segments_from_corrected_trace
+                    else:
+                        corrected_trace = calcium_trace
                     mean_beat = _get_mean_beat(corrected_trace, beat_segments)
                     parameters = get_parameters(
                         mean_beat, config.acquisition_frequency, config.pacing_frequency

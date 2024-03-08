@@ -2,7 +2,6 @@ from __future__ import annotations # Required for windows version to run.
 import pathlib
 from typing import Union
 
-from PIL import Image, ImageSequence
 import bioformats as bf
 import cv2
 import javabridge
@@ -19,7 +18,7 @@ def post_read() -> None:
     javabridge.kill_vm()
 
 
-def _get_video_frames_nd2(path: str, nd2_calcium_layer_index=0) -> npt.NDArray:
+def _get_video_frames_nd2(path: str, nd2_calcium_layer_index=1) -> npt.NDArray:
     images = nd2.imread(path)
     return images[:, nd2_calcium_layer_index, :, :]
 
@@ -74,7 +73,7 @@ def _get_video_frames_other(path: str) -> Union[npt.NDArray, None]:
     return np.array(frames)
 
 
-def get_video_frames(path: str, nd2_calcium_layer_index=0) -> Union[npt.NDArray, None]:
+def get_video_frames(path: str, nd2_calcium_layer_index=1) -> Union[npt.NDArray, None]:
     """
     Extract frames from a video file and return them as grayscale images.
 
@@ -101,14 +100,15 @@ def get_video_frames(path: str, nd2_calcium_layer_index=0) -> Union[npt.NDArray,
             result = _get_video_frames_nd2(path, nd2_calcium_layer_index)
         elif format == ".vsi":
             result = _get_video_frames_vsi(path)
-        elif format == ".tif" | ".tiff":
+        elif format == ".tif" or format == ".tiff":
             result = _get_video_frames_multipage(path)
         else:
             result = _get_video_frames_other(path)
     except FileNotFoundError:
         print(f"File with path {path} cannot be found, ignoring...")
-    except:
-
-        print(f"An unexpected exception occurred whilst reading {path}, ignoring...")
+    except MemoryError:
+        print(f"Failed to load {path} as memory cannot be allocated, ignoring...")
+    # except:
+    #     print(f"An unexpected exception occurred whilst reading {path}, ignoring...")
 
     return result

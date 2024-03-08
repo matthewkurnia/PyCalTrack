@@ -6,12 +6,13 @@ Usage = Enum("Usage", ["SINGLE_CELL", "MULTI_CELL"])
 
 usage = Usage.SINGLE_CELL
 extract_traces = True
-acquisition_frequency = 50
+acquisition_frequency = 100
 pacing_frequency = 1
+apply_photo_bleach_correction = True
 beginning_frames_removed = 1
 max_pacing_deviation = 0.2
 good_snr = False
 quiet = True
 
-videos_directory = "/mnt/d/30-11-20 ISO WT/control"
-# videos_directory = "sample_videos/notworkinglol"
+# videos_directory = "E:/06-12-2023_PGP1WT-RGECO-aActGFP_PFRPMI_afi_acute/dmso"
+videos_directory = "D:/30-11-20 ISO WT/3um"
