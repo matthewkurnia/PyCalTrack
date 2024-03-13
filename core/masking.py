@@ -1,33 +1,34 @@
-from __future__ import annotations # Required for windows version to run.
+from __future__ import annotations  # Required for windows version to run.
 from math import ceil
 from typing import Tuple
 import cv2
+from matplotlib import pyplot as plt
 import numpy as np
 import numpy.typing as npt
 
+
 def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
     # Assuming that the each pixel in every frame have range [0, 1].
-    frames = (255 * frames).astype(np.uint8)
+    frames = (65535 * frames).astype(np.uint16)
 
     height, width, n_frames = frames.shape
 
     stacked_frames = frames.reshape(height * n_frames, width)
 
     threshold, _ = cv2.threshold(
-        stacked_frames, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        stacked_frames, 0, 65535, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
 
     raw_masks = np.zeros_like(frames)
     for i, frame in enumerate(frames):
-        _, raw_threshold = cv2.threshold(frame, threshold, 255, cv2.THRESH_BINARY)
+        _, raw_threshold = cv2.threshold(frame, threshold, 65535, cv2.THRESH_BINARY)
 
         raw_masks[i] = raw_threshold
 
-    mean_raw_mask = np.clip(np.mean(raw_masks, axis=0), 0, 255).astype(np.uint8)
+    mean_raw_mask = np.clip(np.mean(raw_masks, axis=0), 0, 65535).astype(np.uint8)
     _, mean_raw_mask_binarized = cv2.threshold(
-        mean_raw_mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        mean_raw_mask, 0, 65535, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
-
     mean_raw_mask_binarized = mean_raw_mask_binarized.astype(np.uint8)
 
     (

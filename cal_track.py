@@ -98,6 +98,10 @@ def _get_mean_beat(
 
 
 def main() -> None:
+    # im1 = loadmat("sample_videos/IM1.mat")["IM1"]
+    # plt.imshow(im1[:, :, 50])
+    # plt.show()
+
     # Make results folder.
     if not os.path.exists("results"):
         os.mkdir("results")
@@ -129,6 +133,13 @@ def main() -> None:
             except:
                 print(f"Masking failed for {path}, skipping.")
                 continue
+
+            # ml_mask = loadmat("sample_videos/FinalMask.mat")["FinalMask"]
+            # plt.subplot(1, 2, 1)
+            # plt.imshow(mask)
+            # plt.subplot(1, 2, 2)
+            # plt.imshow(ml_mask)
+            # plt.show()
             calcium_trace = get_calcium_trace(analysed_frames, mask)
             # ignored_trace = calcium_trace[: config.beginning_frames_removed]
             # analysed_trace = calcium_trace[config.beginning_frames_removed :]
@@ -360,7 +371,7 @@ def main() -> None:
             for big_ax in big_axes:
                 big_ax.axis("off")
 
-            n_rows = max(len(videos) - n_success, n_success)
+            n_rows = max(len(single_cell_traces) - n_success, n_success)
             i_successful = 0
             i_failed = 0
             for (
@@ -416,6 +427,73 @@ def main() -> None:
                             config.acquisition_frequency,
                             config.pacing_frequency,
                         )
+                        #### EXPERIMENTAL
+                        # trend_1 = lambda x: 0.00004 * x
+                        # trend_2 = lambda x: -0.00003 * x
+                        # trend_3 = lambda x: 0.00000024 * x * x
+                        # trend_4 = lambda x: -0.00000036 * x * x
+                        # x_values = np.arange(corrected_trace.size)
+                        # plt.figure("Photo Bleach Correction", figsize=(14, 6))
+                        # plt.plot(
+                        #     calcium_trace + trend_1(x_values),
+                        #     linestyle="dashed",
+                        #     color="red",
+                        # )
+                        # plt.plot(
+                        #     photo_bleach_correction(
+                        #         calcium_trace + trend_1(x_values),
+                        #         beat_segments,
+                        #         config.acquisition_frequency,
+                        #         config.pacing_frequency,
+                        #     ),
+                        #     color="red",
+                        # )
+                        # plt.plot(
+                        #     calcium_trace + trend_2(x_values),
+                        #     linestyle="dashed",
+                        #     color="blue",
+                        # )
+                        # plt.plot(
+                        #     photo_bleach_correction(
+                        #         calcium_trace + trend_2(x_values),
+                        #         beat_segments,
+                        #         config.acquisition_frequency,
+                        #         config.pacing_frequency,
+                        #     ),
+                        #     color="blue",
+                        # )
+                        # plt.plot(
+                        #     calcium_trace + trend_3(x_values),
+                        #     linestyle="dashed",
+                        #     color="green",
+                        # )
+                        # plt.plot(
+                        #     photo_bleach_correction(
+                        #         calcium_trace + trend_3(x_values),
+                        #         beat_segments,
+                        #         config.acquisition_frequency,
+                        #         config.pacing_frequency,
+                        #     ),
+                        #     color="green",
+                        # )
+                        # plt.plot(
+                        #     calcium_trace + trend_4(x_values),
+                        #     linestyle="dashed",
+                        #     color="purple",
+                        # )
+                        # plt.plot(
+                        #     photo_bleach_correction(
+                        #         calcium_trace + trend_4(x_values),
+                        #         beat_segments,
+                        #         config.acquisition_frequency,
+                        #         config.pacing_frequency,
+                        #     ),
+                        #     color="purple",
+                        # )
+                        # plt.ylabel("RGECO Fluorescence (AU)")
+                        # plt.xlabel("Time (ms)")
+                        # plt.show()
+                        #### EXPERIMENTAL
                         beat_segments_from_corrected_trace = beat_segmentation(
                             corrected_trace,
                             config.acquisition_frequency,
