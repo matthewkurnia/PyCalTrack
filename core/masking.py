@@ -11,7 +11,7 @@ def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
     # Assuming that the each pixel in every frame have range [0, 1].
     frames = (65535 * frames).astype(np.uint16)
 
-    height, width, n_frames = frames.shape
+    n_frames, height, width = frames.shape
 
     stacked_frames = frames.reshape(height * n_frames, width)
 
@@ -21,15 +21,20 @@ def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
 
     raw_masks = np.zeros_like(frames)
     for i, frame in enumerate(frames):
-        _, raw_threshold = cv2.threshold(frame, threshold, 65535, cv2.THRESH_BINARY)
+        _, raw_mask = cv2.threshold(frame, threshold * 0.766, 65535, cv2.THRESH_BINARY)
+        raw_masks[i] = raw_mask
 
-        raw_masks[i] = raw_threshold
-
-    mean_raw_mask = np.clip(np.mean(raw_masks, axis=0), 0, 65535).astype(np.uint8)
-    _, mean_raw_mask_binarized = cv2.threshold(
+    mean_raw_mask = np.mean(raw_masks, axis=0).astype(np.uint16)
+    threshold, _ = cv2.threshold(
         mean_raw_mask, 0, 65535, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
+    _, mean_raw_mask_binarized = cv2.threshold(
+        mean_raw_mask, threshold * 0.766, 65535, cv2.THRESH_BINARY
+    )
     mean_raw_mask_binarized = mean_raw_mask_binarized.astype(np.uint8)
+
+    plt.imshow(mean_raw_mask_binarized)
+    plt.show()
 
     (
         n_blobs,
@@ -49,10 +54,6 @@ def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
     for blob in range(n_blobs):
         if sizes[blob] >= min_size:
             resulting_mask[image_with_separated_blobs == blob + 1] = 255
-
-    dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
-    resulting_mask = cv2.dilate(resulting_mask, dilation_kernel)
-
     resulting_mask = cv2.bitwise_not(resulting_mask)
 
     (
@@ -73,6 +74,9 @@ def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
             resulting_mask[image_with_separated_blobs == blob] = 0
 
     resulting_mask = cv2.bitwise_not(resulting_mask)
+
+    dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
+    resulting_mask = cv2.dilate(resulting_mask, dilation_kernel)
 
     resulting_mask = resulting_mask.astype(np.bool_)
 

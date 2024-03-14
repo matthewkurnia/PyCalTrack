@@ -14,12 +14,13 @@ from core.flags import (
     INTERPOLATE_INTERCEPT,
     PRUNE_BAD_TRACES,
     USE_MILLISECOND,
+    AGGRESSIVE_PRUNING,
 )
 from core.utils import moving_average
 
 
 DIFF_KERNEL_WIDTH = 8 if config.usage == config.Usage.SINGLE_CELL else 10
-PEAK_PROMINENCE_THRESHOLD = 0.5
+PEAK_PROMINENCE_THRESHOLD = 0.4
 TRACE_ONSET_DELAY = 0.1
 BASELINE_WINDOW = 0.2
 BASELINE_INCREASE = 0.03
@@ -86,6 +87,11 @@ def beat_segmentation(
     deviation_detected = np.any(trace_peak_periods < cutoff_lower_bound)
     deviation_detected |= np.any(trace_peak_periods > cutoff_upper_bound)
 
+    diff_peak_periods = np.diff(diff_peak_indices / acquisition_frequency)
+    # Check if there are any periods which is less than our cutoff threshold.
+    deviation_detected |= np.any(diff_peak_periods < cutoff_lower_bound)
+    deviation_detected |= np.any(diff_peak_periods > cutoff_upper_bound)
+
     if (diff_peak_indices.size - trace_peak_indices.size) > 1:
         # Number of peaks in gradient does not match with number of peaks in value.
         print(
@@ -100,6 +106,12 @@ def beat_segmentation(
         # Trace too flat, unable to detect any peaks in gradient.
         print("Flat trace detected, skipping.")
         return None
+    elif AGGRESSIVE_PRUNING:
+        trace_duration = calcium_trace.size / acquisition_frequency
+        ideal_n_traces = round(trace_duration - 2)
+        if len(trace_peak_indices) < ideal_n_traces:
+            print("AGGRESSIVE PRUNING: Trace shape does not match ideal, skipping.")
+            return None
 
     segmented_beats: list[npt.NDArray] = []
     beat_segments: list[Tuple[int, int]] = []
@@ -144,7 +156,10 @@ def beat_segmentation(
         last_transient_period = (
             last_transient_end - last_transient_start
         ) / acquisition_frequency
-        if last_transient_period >= cutoff_lower_bound:
+        if (
+            last_transient_period > cutoff_lower_bound
+            and last_transient_period < cutoff_upper_bound
+        ):
             start = last_transient_start * stride
             end = last_transient_end * stride
             segmented_beats.append(calcium_trace_original[start:end])

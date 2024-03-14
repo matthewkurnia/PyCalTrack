@@ -98,9 +98,16 @@ def _get_mean_beat(
 
 
 def main() -> None:
-    # im1 = loadmat("sample_videos/IM1.mat")["IM1"]
-    # plt.imshow(im1[:, :, 50])
+    # mask = loadmat("FinalMask.mat")["FinalMask"]
+    # plt.imshow(mask)
     # plt.show()
+
+    # traces = pd.read_excel("Calcium_Traces.xlsx")
+    # my_trace = traces["Tab13"].iloc[1:].values
+    # parameters = get_parameters(my_trace, config.acquisition_frequency, config.pacing_frequency)
+    # for name, value in zip(PARAMETER_NAMES, parameters):
+    #     print(f"{name}: {value}")
+    # return
 
     # Make results folder.
     if not os.path.exists("results"):
@@ -134,11 +141,11 @@ def main() -> None:
                 print(f"Masking failed for {path}, skipping.")
                 continue
 
-            # ml_mask = loadmat("sample_videos/FinalMask.mat")["FinalMask"]
+            # ml_mask = loadmat("IM1.mat")["IM1"]
             # plt.subplot(1, 2, 1)
-            # plt.imshow(mask)
+            # plt.imshow(ml_mask[:, :, 50])
             # plt.subplot(1, 2, 2)
-            # plt.imshow(ml_mask)
+            # plt.imshow(mask)
             # plt.show()
             calcium_trace = get_calcium_trace(analysed_frames, mask)
             # ignored_trace = calcium_trace[: config.beginning_frames_removed]
