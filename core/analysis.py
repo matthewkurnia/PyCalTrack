@@ -107,10 +107,16 @@ def beat_segmentation(
         print("Flat trace detected, skipping.")
         return None
     elif AGGRESSIVE_PRUNING:
+        prominences, *_ = peak_prominences(calcium_trace, trace_peak_indices)
+        if min(prominences) / max(prominences) < 0.5:
+            print(
+                "AGGRESSIVE PRUNING: Too much variation in peak magnitudes, skipping."
+            )
+            return None
         trace_duration = calcium_trace.size / acquisition_frequency
         ideal_n_traces = round(trace_duration - 2)
         if len(trace_peak_indices) < ideal_n_traces:
-            print("AGGRESSIVE PRUNING: Trace shape does not match ideal, skipping.")
+            print("AGGRESSIVE PRUNING: Ideal number of traces not reached, skipping.")
             return None
 
     segmented_beats: list[npt.NDArray] = []
