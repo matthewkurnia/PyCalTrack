@@ -20,25 +20,22 @@ from core.utils import moving_average
 
 
 DIFF_KERNEL_WIDTH = 8 if config.usage == config.Usage.SINGLE_CELL else 10
-PEAK_PROMINENCE_THRESHOLD = 0.4
 TRACE_ONSET_DELAY = 0.1
 BASELINE_WINDOW = 0.2
 BASELINE_INCREASE = 0.03
 
 
 def get_calcium_trace(frames: npt.NDArray, mask: npt.NDArray) -> npt.NDArray:
-    if config.usage == config.Usage.SINGLE_CELL:
-        return np.sum(frames[:, mask], axis=1)
-    return np.mean(frames[:, mask], axis=1)
+    return np.mean(frames[:, mask], axis=1).astype(np.float64)
 
 
-def _find_peak_indices(x: npt.NDArray) -> npt.NDArray:
+def _find_peak_indices(x: npt.NDArray, prominence_threshold: float) -> npt.NDArray:
     peaks_raw, _ = find_peaks(x)
     prominences, *_ = peak_prominences(x, peaks_raw)
     if prominences.size == 0:
         return np.array([])
     indices, _ = find_peaks(
-        x, prominence=PEAK_PROMINENCE_THRESHOLD * np.max(prominences)
+        x, prominence=prominence_threshold * np.max(prominences)
     )
     return indices
 
@@ -77,10 +74,10 @@ def beat_segmentation(
 
     # Find the peaks of the slope.
     # That is, when the most change occurs in the trace.
-    diff_peak_indices = _find_peak_indices(diff_smoothed)
+    diff_peak_indices = _find_peak_indices(diff_smoothed, 0.5)
 
     # Find the peaks of the trace itself.
-    trace_peak_indices = _find_peak_indices(calcium_trace)
+    trace_peak_indices = _find_peak_indices(calcium_trace, 0.4)
 
     trace_peak_periods = np.diff(trace_peak_indices / acquisition_frequency)
     # Check if there are any periods which is less than our cutoff threshold.
@@ -92,7 +89,7 @@ def beat_segmentation(
     deviation_detected |= np.any(diff_peak_periods < cutoff_lower_bound)
     deviation_detected |= np.any(diff_peak_periods > cutoff_upper_bound)
 
-    if (diff_peak_indices.size - trace_peak_indices.size) > 1:
+    if abs(diff_peak_indices.size - trace_peak_indices.size) > 1:
         # Number of peaks in gradient does not match with number of peaks in value.
         print(
             "Number of peaks in gradient does not match with number of peaks in value, skipping."
@@ -279,7 +276,7 @@ def get_parameters(
     end_index = floor(decay_intercept) + peak_location
     transient_trace = trace[start_index:end_index]
     baseline_trace = np.concatenate((trace[:start_index], trace[end_index:]))
-    snr = transient_trace.mean() / baseline_trace.std()
+    snr = (transient_trace.mean() - baseline) / baseline_trace.std()
 
     t_start = attack_intercept * acquisition_period
 
@@ -365,6 +362,10 @@ def get_parameters(
         ss_tot = np.sum((ys - np.mean(ys)) ** 2)
         r_squared = 1 - (ss_res / ss_tot)
         tau = 1 / (b * acquisition_frequency)
+
+        # plt.plot(trace_decay)
+        # plt.plot(exponential(np.arange(trace_decay.size), a, b, c))
+        # plt.show()
 
         unit_multiplier = 1
         if USE_MILLISECOND:

@@ -7,10 +7,7 @@ import numpy as np
 import numpy.typing as npt
 
 
-def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
-    # Assuming that the each pixel in every frame have range [0, 1].
-    frames = (65535 * frames).astype(np.uint16)
-
+def get_mask_single_cell(frames: npt.NDArray[np.uint16]) -> npt.NDArray:
     n_frames, height, width = frames.shape
 
     stacked_frames = frames.reshape(height * n_frames, width)
@@ -32,9 +29,6 @@ def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
         mean_raw_mask, threshold * 0.766, 65535, cv2.THRESH_BINARY
     )
     mean_raw_mask_binarized = mean_raw_mask_binarized.astype(np.uint8)
-
-    plt.imshow(mean_raw_mask_binarized)
-    plt.show()
 
     (
         n_blobs,
@@ -92,7 +86,7 @@ def _get_kernel_size(sigma: float) -> Tuple[int, int]:
 
 
 def get_mask_multi_cell(frames: npt.NDArray) -> list[npt.NDArray]:
-    # Assuming that the each pixel in every frame have range [0, 1].
+    # We rescale the values here, so the datatype of frames does not matter.
     average_frame = np.mean(frames, axis=0)
     average_frame_rescaled = np.interp(
         average_frame, (average_frame.min(), average_frame.max()), (0, 1)

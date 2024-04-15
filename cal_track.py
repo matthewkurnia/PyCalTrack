@@ -13,6 +13,7 @@ import numpy.typing as npt
 from itertools import zip_longest
 from statistics import mean
 
+
 from core.analysis import (
     beat_segmentation,
     get_calcium_trace,
@@ -68,6 +69,16 @@ def _get_paths(path_to_directory: str) -> list[str]:
         return []
 
 
+def _to_uint16(arr: npt.NDArray) -> npt.NDArray[np.uint16]:
+    if arr.dtype == "uint16":
+        return arr
+    if arr.dtype == "uint8":
+        return arr.astype(np.uint16) * 256
+    if arr.dtype == "float32" or arr.dtype == "float64":
+        return (arr * 65535).astype(np.uint16)
+    raise Exception(f"I can't work with this datatype: {arr.dtype}")
+
+
 def _get_videos(paths: list[str]) -> Iterator[Tuple[npt.NDArray, str]]:
     pre_read()
     for path in paths:
@@ -98,17 +109,6 @@ def _get_mean_beat(
 
 
 def main() -> None:
-    # mask = loadmat("FinalMask.mat")["FinalMask"]
-    # plt.imshow(mask)
-    # plt.show()
-
-    # traces = pd.read_excel("Calcium_Traces.xlsx")
-    # my_trace = traces["Tab13"].iloc[1:].values
-    # parameters = get_parameters(my_trace, config.acquisition_frequency, config.pacing_frequency)
-    # for name, value in zip(PARAMETER_NAMES, parameters):
-    #     print(f"{name}: {value}")
-    # return
-
     # Make results folder.
     if not os.path.exists("results"):
         os.mkdir("results")
@@ -134,22 +134,14 @@ def main() -> None:
 
         for video_frames, path in videos:
             name = _get_name_from_path(path)
-            analysed_frames = video_frames[config.beginning_frames_removed :]
+            analysed_frames = _to_uint16(video_frames[config.beginning_frames_removed :])
             try:
                 mask = get_mask_single_cell(analysed_frames)
             except:
                 print(f"Masking failed for {path}, skipping.")
                 continue
 
-            # ml_mask = loadmat("IM1.mat")["IM1"]
-            # plt.subplot(1, 2, 1)
-            # plt.imshow(ml_mask[:, :, 50])
-            # plt.subplot(1, 2, 2)
-            # plt.imshow(mask)
-            # plt.show()
             calcium_trace = get_calcium_trace(analysed_frames, mask)
-            # ignored_trace = calcium_trace[: config.beginning_frames_removed]
-            # analysed_trace = calcium_trace[config.beginning_frames_removed :]
             beat_segments = beat_segmentation(
                 calcium_trace,
                 config.acquisition_frequency,
