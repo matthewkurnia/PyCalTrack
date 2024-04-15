@@ -34,9 +34,7 @@ def _find_peak_indices(x: npt.NDArray, prominence_threshold: float) -> npt.NDArr
     prominences, *_ = peak_prominences(x, peaks_raw)
     if prominences.size == 0:
         return np.array([])
-    indices, _ = find_peaks(
-        x, prominence=prominence_threshold * np.max(prominences)
-    )
+    indices, _ = find_peaks(x, prominence=prominence_threshold * np.max(prominences))
     return indices
 
 
