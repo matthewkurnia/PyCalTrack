@@ -42,10 +42,6 @@ def _get_video_frames_multipage(path: str) -> npt.NDArray:
     if not ret:
         raise Exception("File read unsuccessful!")
     frames = np.array(frames)
-    if np.max(frames) > 255:
-        frames = frames / 65535
-    else:
-        frames = frames / 255
     return frames
 
 
@@ -64,9 +60,7 @@ def _get_video_frames_other(path: str) -> Union[npt.NDArray, None]:
             break
 
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        image = gray_frame.astype(np.float64) / 255.0
-
-        frames.append(image)
+        frames.append(gray_frame)
 
     if len(frames) == 0:
         return None
