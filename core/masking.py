@@ -33,9 +33,6 @@ def get_mask_single_cell(frames: npt.NDArray) -> npt.NDArray:
     )
     mean_raw_mask_binarized = mean_raw_mask_binarized.astype(np.uint8)
 
-    plt.imshow(mean_raw_mask_binarized)
-    plt.show()
-
     (
         n_blobs,
         image_with_separated_blobs,

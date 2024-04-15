@@ -27,6 +27,7 @@ BASELINE_INCREASE = 0.03
 
 
 def get_calcium_trace(frames: npt.NDArray, mask: npt.NDArray) -> npt.NDArray:
+    breakpoint()
     if config.usage == config.Usage.SINGLE_CELL:
         return np.sum(frames[:, mask], axis=1)
     return np.mean(frames[:, mask], axis=1)
