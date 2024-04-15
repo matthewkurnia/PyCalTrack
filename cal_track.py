@@ -62,7 +62,7 @@ def _get_paths(path_to_directory: str) -> list[str]:
         paths = []
         for path in os.scandir(path_to_directory):
             if path.is_file():
-                paths.append(path.path)
+                paths.append(os.path.normpath(path.path))
         return paths
     except FileNotFoundError:
         print(f"Error: {config.videos_directory} does not exist.")
@@ -90,9 +90,9 @@ def _get_videos(paths: list[str]) -> Iterator[Tuple[npt.NDArray, str]]:
 
 
 def _get_name_from_path(path: str) -> str:
-    if config.videos_directory[-1] == "/":
-        return path[len(config.videos_directory) :].replace("/", "-")
-    return path[len(config.videos_directory) + 1 :].replace("/", "-")
+    if config.videos_directory[-1] == "/" or config.videos_directory[-1] == "\\":
+        return path[len(config.videos_directory) :].replace("/", "-").replace("\\", "-")
+    return path[len(config.videos_directory) + 1 :].replace("/", "-").replace("\\", "-")
 
 
 def _get_mean_beat(
@@ -109,11 +109,16 @@ def _get_mean_beat(
 
 
 def main() -> None:
-    # Make results folder.
-    if not os.path.exists("results"):
-        os.mkdir("results")
+    # Normalise directory.
+    config.videos_directory = os.path.normpath(config.videos_directory)
+    
+    # Create results folder.
+    results_path = os.path.join(config.videos_directory, "py_cal_track_analysis")
+    if not os.path.exists(results_path):
+        os.mkdir(results_path)
 
-    files = glob.glob("results/*")
+    # Empty folder.
+    files = glob.glob(results_path + "/*")
     for file in files:
         os.remove(file)
 
@@ -210,7 +215,7 @@ def main() -> None:
             )
 
         # Save raw calcium trace to file.
-        with pd.ExcelWriter("results/calcium_traces.xlsx") as excel_writer:
+        with pd.ExcelWriter(os.path.join(results_path, "calcium_traces.xlsx")) as excel_writer:
             names = [name for name, *_ in single_cell_traces]
 
             traces = [trace for _, trace, *_ in single_cell_traces]
@@ -250,33 +255,33 @@ def main() -> None:
             normalised_corrected_traces_df.to_excel(
                 excel_writer, sheet_name="Normalised Corrected Traces", index=False
             )
-            print("Saved traces to results/calcium_traces.xlsx!")
+            print("Saved traces to " + os.path.join(results_path, "calcium_traces.xlsx!"))
 
         # Save traces with irregular beats.
-        with pd.ExcelWriter("results/calcium_traces_irregular.xlsx") as excel_writer:
+        with pd.ExcelWriter(os.path.join(results_path, "calcium_traces_irregular.xlsx")) as excel_writer:
             names = [name for name, _ in irregular_traces]
             traces = [trace for _, trace in irregular_traces]
             traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
             traces_df.to_excel(excel_writer, index=False)
             print(
-                "Saved traces with irregular beats to results/calcium_traces_irregular.xlsx"
+                "Saved traces with irregular beats to " + os.path.join(results_path, "calcium_traces_irregular.xlsx")
             )
 
         # Save traces that failed parameter fitting.
         with pd.ExcelWriter(
-            "results/calcium_traces_failed_parameters.xlsx"
+            os.path.join(results_path, "calcium_traces_failed_parameters.xlsx")
         ) as excel_writer:
             names = [name for name, _ in failed_parameters_traces]
             traces = [trace for _, trace in failed_parameters_traces]
             traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
             traces_df.to_excel(excel_writer, index=False)
             print(
-                "Saved traces with irregular beats to results/calcium_traces_failed_parameters.xlsx"
+                "Saved traces with irregular beats to " + os.path.join(results_path, "calcium_traces_failed_parameters.xlsx")
             )
 
         if config.good_snr:
             # Save individual beat traces.
-            with pd.ExcelWriter("results/individual_beat_traces.xlsx") as excel_writer:
+            with pd.ExcelWriter(f"{results_path}/individual_beat_traces.xlsx") as excel_writer:
                 sheet_written = False
                 for name, _, corrected_trace, beat_segments, _ in single_cell_traces:
                     if beat_segments is not None:
@@ -293,12 +298,12 @@ def main() -> None:
                 if not sheet_written:
                     pd.DataFrame([]).to_excel(excel_writer)
                 print(
-                    "Saved individual beat traces to results/individual_beat_traces.xlsx!"
+                    f"Saved individual beat traces to {results_path}/individual_beat_traces.xlsx!"
                 )
 
             # Save individual beat parameters.
             with pd.ExcelWriter(
-                "results/individual_beat_parameters.xlsx"
+                f"{results_path}/individual_beat_parameters.xlsx"
             ) as excel_writer:
                 sheet_written = False
                 for name, _, _, _, parameters_list in single_cell_traces:
@@ -314,11 +319,11 @@ def main() -> None:
                 if not sheet_written:
                     pd.DataFrame([]).to_excel(excel_writer)
                 print(
-                    "Saved fitted parameters to results/individual_beat_parameters.xlsx!"
+                    f"Saved fitted parameters to {results_path}/individual_beat_parameters.xlsx!"
                 )
 
         # Save mean beat traces.
-        with pd.ExcelWriter("results/mean_beat_traces.xlsx") as excel_writer:
+        with pd.ExcelWriter(f"{results_path}/mean_beat_traces.xlsx") as excel_writer:
             mean_traces = [
                 _get_mean_beat(corrected_trace, beat_segments)
                 for _, _, corrected_trace, beat_segments, _ in single_cell_traces
@@ -331,10 +336,10 @@ def main() -> None:
             ]
             mean_beats_df = pd.DataFrame(data=zip_longest(*mean_traces), columns=names)
             mean_beats_df.to_excel(excel_writer, index=False)
-            print("Saved mean beat traces to results/mean_beat_traces.xlsx!")
+            print(f"Saved mean beat traces to {results_path}/mean_beat_traces.xlsx!")
 
         # Save mean beat parameters.
-        with pd.ExcelWriter("results/mean_beat_parameters.xlsx") as excel_writer:
+        with pd.ExcelWriter(f"{results_path}/mean_beat_parameters.xlsx") as excel_writer:
             mean_parameters = [
                 [
                     name,
@@ -357,7 +362,7 @@ def main() -> None:
                 data=mean_parameters, columns=["video", *PARAMETER_NAMES]
             )
             mean_parameters_df.to_excel(excel_writer, index=False)
-            print("Saved mean fitted parameters to results/mean_beat_parameters.xlsx")
+            print(f"Saved mean fitted parameters to {results_path}/mean_beat_parameters.xlsx")
 
         # Plot results.
         if not config.quiet:
@@ -537,7 +542,7 @@ def main() -> None:
             )
 
         # Save raw traces to file.
-        with pd.ExcelWriter("results/calcium_traces.xlsx") as excel_writer:
+        with pd.ExcelWriter(f"{results_path}/calcium_traces.xlsx") as excel_writer:
             sheet_written = False
             for *_, name, traces_analysis in multi_cell_traces:
                 traces = [trace for _, _, trace, *_ in traces_analysis]
@@ -549,10 +554,10 @@ def main() -> None:
                 sheet_written = True
             if not sheet_written:
                 pd.DataFrame([]).to_excel(excel_writer)
-            print("Saved calcium traces to results/calcium_traces.xlsx!")
+            print(f"Saved calcium traces to {results_path}/calcium_traces.xlsx!")
 
         # Save analysed traces to file.
-        with pd.ExcelWriter("results/beat_traces.xlsx") as excel_writer:
+        with pd.ExcelWriter(f"{results_path}/beat_traces.xlsx") as excel_writer:
             sheet_written = False
             for mean_frame, name, traces_analysis in multi_cell_traces:
                 mean_beats = []
@@ -569,10 +574,10 @@ def main() -> None:
                 sheet_written = True
             if not sheet_written:
                 pd.DataFrame([]).to_excel(excel_writer)
-            print("Saved beat traces to results/beat_traces.xlsx!")
+            print(f"Saved beat traces to {results_path}/beat_traces.xlsx!")
 
         # Save fitted parameters to file.
-        with pd.ExcelWriter("results/beat_parameters.xlsx") as excel_writer:
+        with pd.ExcelWriter(f"{results_path}/beat_parameters.xlsx") as excel_writer:
             sheet_written = False
             parameters_mega_list = []
             for mean_frame, name, traces_analysis in multi_cell_traces:
@@ -595,28 +600,28 @@ def main() -> None:
             )
             if not sheet_written:
                 pd.DataFrame([]).to_excel(excel_writer)
-            print("Saved fitted parameters to results/calcium_traces.xlsx!")
+            print(f"Saved fitted parameters to {results_path}/calcium_traces.xlsx!")
 
         # Save traces with irregular beats.
-        with pd.ExcelWriter("results/calcium_traces_irregular.xlsx") as excel_writer:
+        with pd.ExcelWriter(f"{results_path}/calcium_traces_irregular.xlsx") as excel_writer:
             names = [name for name, _ in irregular_traces]
             traces = [trace for _, trace in irregular_traces]
             traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
             traces_df.to_excel(excel_writer, index=False)
             print(
-                "Saved traces with irregular beats to results/calcium_traces_irregular.xlsx"
+                f"Saved traces with irregular beats to {results_path}/calcium_traces_irregular.xlsx"
             )
 
         # Save traces that failed parameter fitting.
         with pd.ExcelWriter(
-            "results/calcium_traces_failed_parameters.xlsx"
+            f"{results_path}/calcium_traces_failed_parameters.xlsx"
         ) as excel_writer:
             names = [name for name, _ in failed_parameters_traces]
             traces = [trace for _, trace in failed_parameters_traces]
             traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
             traces_df.to_excel(excel_writer, index=False)
             print(
-                "Saved traces with irregular beats to results/calcium_traces_failed_parameters.xlsx"
+                f"Saved traces with irregular beats to {results_path}/calcium_traces_failed_parameters.xlsx"
             )
 
         # Plot results.
