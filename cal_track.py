@@ -73,7 +73,8 @@ def _to_uint16(arr: npt.NDArray) -> npt.NDArray[np.uint16]:
     if arr.dtype == "uint16":
         return arr
     if arr.dtype == "uint8":
-        return arr.astype(np.uint16) * 256
+        # To satisfy type checker.
+        return (arr.astype(np.uint16) << 8).astype(np.uint16)
     if arr.dtype == "float32" or arr.dtype == "float64":
         return (arr * 65535).astype(np.uint16)
     raise Exception(f"I can't work with this datatype: {arr.dtype}")
@@ -111,7 +112,7 @@ def _get_mean_beat(
 def main() -> None:
     # Normalise directory.
     config.videos_directory = os.path.normpath(config.videos_directory)
-    
+
     # Create results folder.
     results_path = os.path.join(config.videos_directory, "py_cal_track_analysis")
     if not os.path.exists(results_path):
@@ -139,7 +140,9 @@ def main() -> None:
 
         for video_frames, path in videos:
             name = _get_name_from_path(path)
-            analysed_frames = _to_uint16(video_frames[config.beginning_frames_removed :])
+            analysed_frames = _to_uint16(
+                video_frames[config.beginning_frames_removed :]
+            )
             try:
                 mask = get_mask_single_cell(analysed_frames)
             except:
@@ -215,7 +218,9 @@ def main() -> None:
             )
 
         # Save raw calcium trace to file.
-        with pd.ExcelWriter(os.path.join(results_path, "calcium_traces.xlsx")) as excel_writer:
+        with pd.ExcelWriter(
+            os.path.join(results_path, "calcium_traces.xlsx")
+        ) as excel_writer:
             names = [name for name, *_ in single_cell_traces]
 
             traces = [trace for _, trace, *_ in single_cell_traces]
@@ -255,16 +260,21 @@ def main() -> None:
             normalised_corrected_traces_df.to_excel(
                 excel_writer, sheet_name="Normalised Corrected Traces", index=False
             )
-            print("Saved traces to " + os.path.join(results_path, "calcium_traces.xlsx!"))
+            print(
+                "Saved traces to " + os.path.join(results_path, "calcium_traces.xlsx!")
+            )
 
         # Save traces with irregular beats.
-        with pd.ExcelWriter(os.path.join(results_path, "calcium_traces_irregular.xlsx")) as excel_writer:
+        with pd.ExcelWriter(
+            os.path.join(results_path, "calcium_traces_irregular.xlsx")
+        ) as excel_writer:
             names = [name for name, _ in irregular_traces]
             traces = [trace for _, trace in irregular_traces]
             traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
             traces_df.to_excel(excel_writer, index=False)
             print(
-                "Saved traces with irregular beats to " + os.path.join(results_path, "calcium_traces_irregular.xlsx")
+                "Saved traces with irregular beats to "
+                + os.path.join(results_path, "calcium_traces_irregular.xlsx")
             )
 
         # Save traces that failed parameter fitting.
@@ -276,12 +286,15 @@ def main() -> None:
             traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
             traces_df.to_excel(excel_writer, index=False)
             print(
-                "Saved traces with irregular beats to " + os.path.join(results_path, "calcium_traces_failed_parameters.xlsx")
+                "Saved traces with irregular beats to "
+                + os.path.join(results_path, "calcium_traces_failed_parameters.xlsx")
             )
 
         if config.good_snr:
             # Save individual beat traces.
-            with pd.ExcelWriter(f"{results_path}/individual_beat_traces.xlsx") as excel_writer:
+            with pd.ExcelWriter(
+                f"{results_path}/individual_beat_traces.xlsx"
+            ) as excel_writer:
                 sheet_written = False
                 for name, _, corrected_trace, beat_segments, _ in single_cell_traces:
                     if beat_segments is not None:
@@ -339,7 +352,9 @@ def main() -> None:
             print(f"Saved mean beat traces to {results_path}/mean_beat_traces.xlsx!")
 
         # Save mean beat parameters.
-        with pd.ExcelWriter(f"{results_path}/mean_beat_parameters.xlsx") as excel_writer:
+        with pd.ExcelWriter(
+            f"{results_path}/mean_beat_parameters.xlsx"
+        ) as excel_writer:
             mean_parameters = [
                 [
                     name,
@@ -362,7 +377,9 @@ def main() -> None:
                 data=mean_parameters, columns=["video", *PARAMETER_NAMES]
             )
             mean_parameters_df.to_excel(excel_writer, index=False)
-            print(f"Saved mean fitted parameters to {results_path}/mean_beat_parameters.xlsx")
+            print(
+                f"Saved mean fitted parameters to {results_path}/mean_beat_parameters.xlsx"
+            )
 
         # Plot results.
         if not config.quiet:
@@ -603,7 +620,9 @@ def main() -> None:
             print(f"Saved fitted parameters to {results_path}/calcium_traces.xlsx!")
 
         # Save traces with irregular beats.
-        with pd.ExcelWriter(f"{results_path}/calcium_traces_irregular.xlsx") as excel_writer:
+        with pd.ExcelWriter(
+            f"{results_path}/calcium_traces_irregular.xlsx"
+        ) as excel_writer:
             names = [name for name, _ in irregular_traces]
             traces = [trace for _, trace in irregular_traces]
             traces_df = pd.DataFrame(data=zip_longest(*traces), columns=names)
