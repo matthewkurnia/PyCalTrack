@@ -1,4 +1,6 @@
 from __future__ import annotations  # Required for windows version to run.
+import itertools
+import os
 import config
 from math import ceil, floor
 from typing import Tuple, Union
@@ -11,7 +13,9 @@ from scipy.optimize import curve_fit
 from core.flags import (
     EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
     HANDLE_LAST_TRANSIENT,
+    IGNORE_INITIAL_DECAY,
     INTERPOLATE_INTERCEPT,
+    LINEAR_TAU_FITTING,
     PRUNE_BAD_TRACES,
     USE_MILLISECOND,
     AGGRESSIVE_PRUNING,
@@ -23,6 +27,7 @@ DIFF_KERNEL_WIDTH = 8 if config.usage == config.Usage.SINGLE_CELL else 10
 TRACE_ONSET_DELAY = 0.1
 BASELINE_WINDOW = 0.2
 BASELINE_INCREASE = 0.03
+increasing_integers = itertools.count()
 
 
 def get_calcium_trace(frames: npt.NDArray, mask: npt.NDArray) -> npt.NDArray:
@@ -244,7 +249,10 @@ def _get_intercept(values, threshold: float, last: bool = False) -> float:
 
 
 def get_parameters(
-    trace: npt.NDArray, acquisition_frequency: float, pacing_frequency: float
+    trace: npt.NDArray,
+    acquisition_frequency: float,
+    pacing_frequency: float,
+    tau_fittings_path: Union[str, None] = None,
 ) -> Union[list[float], None]:
     pacing_period = 1 / pacing_frequency
     acquisition_period = 1 / acquisition_frequency
@@ -346,24 +354,41 @@ def get_parameters(
         return None
 
     try:
+        if IGNORE_INITIAL_DECAY:
+            cutoff = floor(trace_decay.size * 0.2)
+            ys = trace_decay[cutoff:]
+        else:
+            cutoff = 0
+            ys = trace_decay
+        xs = np.arange(ys.size) + cutoff
+
+        linear = lambda x, a, b: np.log(a) - b * x
         exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
-        xs = np.arange(trace_decay.size)
-        ys = trace_decay
-        [a, b, c], *_ = curve_fit(
-            exponential,
-            xs,
-            ys,
-            p0=[trace_decay[0] - trace_decay[-1], 0.1, trace_decay[-1]],
-        )
+        if LINEAR_TAU_FITTING:
+            c = 0.99 * ys.min()
+            ys = np.log(ys - c)
+            [a, b], *_ = curve_fit(linear, xs, ys, p0=[ys[0] - ys[-1], 0.1])
+        else:
+            [a, b, c], *_ = curve_fit(
+                exponential,
+                xs,
+                ys,
+                p0=[ys[0] - ys[-1], 0.1, ys[-1]],
+            )
         residuals = ys - exponential(xs, a, b, c)
         ss_res = np.sum(residuals**2)
         ss_tot = np.sum((ys - np.mean(ys)) ** 2)
         r_squared = 1 - (ss_res / ss_tot)
         tau = 1 / (b * acquisition_frequency)
 
-        # plt.plot(trace_decay)
-        # plt.plot(exponential(np.arange(trace_decay.size), a, b, c))
-        # plt.show()
+        if tau_fittings_path:
+            plt.figure()
+            plt.plot(trace_decay)
+            plt.plot(exponential(np.arange(trace_decay.size), a, b, c))
+            plt.savefig(
+                os.path.join(tau_fittings_path, f"tau_{next(increasing_integers)}.png")
+            )
+            plt.close()
 
         unit_multiplier = 1
         if USE_MILLISECOND:

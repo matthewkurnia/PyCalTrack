@@ -85,7 +85,9 @@ def _get_kernel_size(sigma: float) -> Tuple[int, int]:
     return (size, size)
 
 
-def get_mask_multi_cell(frames: npt.NDArray) -> list[npt.NDArray]:
+def get_mask_multi_cell(
+    frames: npt.NDArray,
+) -> list[Tuple[npt.NDArray, Tuple[float, float]]]:
     # We rescale the values here, so the datatype of frames does not matter.
     average_frame = np.mean(frames, axis=0)
     average_frame_rescaled = np.interp(

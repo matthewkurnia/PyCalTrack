@@ -1,5 +1,6 @@
 from __future__ import annotations  # Required for windows version to run.
 from math import ceil, inf, sqrt, isnan
+import shutil
 from typing import Tuple, Iterator
 import numpy as np
 import os
@@ -90,6 +91,42 @@ def _get_videos(paths: list[str]) -> Iterator[Tuple[npt.NDArray, str]]:
     post_read()
 
 
+def _get_traces_single_cell(
+    videos: Iterator[Tuple[npt.NDArray, str]]
+) -> Iterator[Tuple[npt.NDArray, str]]:
+    for video_frames, path in videos:
+        name = _get_name_from_path(path)
+        analysed_frames = _to_uint16(video_frames[config.beginning_frames_removed :])
+        try:
+            mask = get_mask_single_cell(analysed_frames)
+        except:
+            print(f"Masking failed for {path}, skipping.")
+            continue
+
+        calcium_trace = get_calcium_trace(analysed_frames, mask)
+        yield (calcium_trace, name)
+
+
+def _get_traces_multi_cell(
+    videos,
+) -> Iterator[
+    Tuple[str, npt.NDArray, list[Tuple[npt.NDArray, npt.NDArray, Tuple[float, float]]]]
+]:
+    for video_frames, path in videos:
+        name = _get_name_from_path(path)
+        analysed_frames = video_frames[config.beginning_frames_removed :]
+        try:
+            masks = get_mask_multi_cell(analysed_frames)
+        except:
+            print(f"Masking failed for {path}, skipping.")
+            continue
+        data = [
+            (get_calcium_trace(video_frames, mask), mask, centre)
+            for mask, centre in masks
+        ]
+        yield (name, np.mean(video_frames, axis=0), data)
+
+
 def _get_name_from_path(path: str) -> str:
     if config.videos_directory[-1] == "/" or config.videos_directory[-1] == "\\":
         return path[len(config.videos_directory) :].replace("/", "-").replace("\\", "-")
@@ -112,25 +149,31 @@ def _get_mean_beat(
 def main() -> None:
     # Normalise directory.
     config.videos_directory = os.path.normpath(config.videos_directory)
+    config.trace_path = os.path.normpath(config.trace_path)
 
     # Create results folder.
-    results_path = os.path.join(config.videos_directory, "py_cal_track_analysis")
+    if config.extract_traces:
+        results_path = os.path.join(config.videos_directory, "pycaltrack_analysis")
+    else:
+        results_path = os.path.join(
+            os.path.dirname(config.trace_path), "pycaltrack_analysis"
+        )
     if not os.path.exists(results_path):
         os.mkdir(results_path)
 
     # Empty folder.
-    files = glob.glob(results_path + "/*")
-    for file in files:
-        os.remove(file)
+    paths = glob.glob(results_path + "/*")
+    for path in paths:
+        if os.path.isfile(path):
+            os.remove(path)
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
 
-    # Get paths to videos.
-    video_paths = _get_paths(config.videos_directory)
-    if len(video_paths) == 0:
-        print(f"{config.videos_directory} is empty, aborting.")
-        return
-
-    # Get video data.
-    videos = _get_videos(video_paths)
+    if config.save_tau_fittings:
+        tau_fittings_path = os.path.join(results_path, "tau_fittings")
+        os.mkdir(tau_fittings_path)
+    else:
+        tau_fittings_path = None
 
     if config.usage == config.Usage.SINGLE_CELL:
         single_cell_traces = []
@@ -138,18 +181,22 @@ def main() -> None:
         failed_parameters_traces = []
         n_success = 0
 
-        for video_frames, path in videos:
-            name = _get_name_from_path(path)
-            analysed_frames = _to_uint16(
-                video_frames[config.beginning_frames_removed :]
-            )
-            try:
-                mask = get_mask_single_cell(analysed_frames)
-            except:
-                print(f"Masking failed for {path}, skipping.")
-                continue
+        if config.extract_traces:
+            # Get paths to videos.
+            video_paths = _get_paths(config.videos_directory)
+            if len(video_paths) == 0:
+                print(f"{config.videos_directory} is empty, aborting.")
+                return
 
-            calcium_trace = get_calcium_trace(analysed_frames, mask)
+            # Get video data.
+            videos = _get_videos(video_paths)
+            traces = _get_traces_single_cell(videos)
+        else:
+            trace_data = pd.read_excel(config.trace_path, sheet_name=None)
+            raw_traces = trace_data["Raw Traces"]
+            traces = [(raw_traces[name].to_numpy(), name) for name in raw_traces]
+
+        for calcium_trace, name in traces:
             beat_segments = beat_segmentation(
                 calcium_trace,
                 config.acquisition_frequency,
@@ -182,6 +229,7 @@ def main() -> None:
                             corrected_trace[start:end],
                             config.acquisition_frequency,
                             config.pacing_frequency,
+                            tau_fittings_path,
                         )
                         if parameters is None:
                             failed_parameters_traces.append(
@@ -196,6 +244,7 @@ def main() -> None:
                         mean_beat,
                         config.acquisition_frequency,
                         config.pacing_frequency,
+                        tau_fittings_path,
                     )
                     if parameters is None:
                         failed_parameters_traces.append((name, mean_beat))
@@ -423,17 +472,25 @@ def main() -> None:
         multi_cell_traces = []
         irregular_traces = []
         failed_parameters_traces = []
-        for video_frames, path in videos:
-            name = _get_name_from_path(path)
-            analysed_frames = video_frames[config.beginning_frames_removed :]
-            try:
-                masks = get_mask_multi_cell(analysed_frames)
-            except:
-                print(f"Masking failed for {path}, skipping.")
-                continue
+
+        if config.extract_traces:
+            # Get paths to videos.
+            video_paths = _get_paths(config.videos_directory)
+            if len(video_paths) == 0:
+                print(f"{config.videos_directory} is empty, aborting.")
+                return
+
+            # Get video data.
+            videos = _get_videos(video_paths)
+            traces = _get_traces_multi_cell(videos)
+        else:
+            trace_data = pd.read_excel(config.trace_path, sheet_name=None)
+            print("Extracting multi-cell data from excel is currently unsupported.")
+            return
+
+        for name, mean_frame, data in traces:
             traces_analysis = []
-            for i, (mask, centre) in enumerate(masks):
-                calcium_trace = get_calcium_trace(video_frames, mask)
+            for i, (calcium_trace, mask, centre) in enumerate(data):
                 beat_segments = beat_segmentation(
                     calcium_trace,
                     config.acquisition_frequency,
@@ -527,7 +584,10 @@ def main() -> None:
                         corrected_trace = calcium_trace
                     mean_beat = _get_mean_beat(corrected_trace, beat_segments)
                     parameters = get_parameters(
-                        mean_beat, config.acquisition_frequency, config.pacing_frequency
+                        mean_beat,
+                        config.acquisition_frequency,
+                        config.pacing_frequency,
+                        tau_fittings_path,
                     )
                     if parameters is None:
                         failed_parameters_traces.append(
@@ -552,7 +612,7 @@ def main() -> None:
                 )
             multi_cell_traces.append(
                 (
-                    np.mean(video_frames, axis=0),
+                    mean_frame,
                     name,
                     traces_analysis,
                 )
