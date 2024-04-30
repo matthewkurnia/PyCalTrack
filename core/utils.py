@@ -3,7 +3,7 @@ import numpy as np
 import numpy.typing as npt
 
 
-def moving_average(x: npt.NDArray, k: int) -> npt.NDArray:
+def moving_mean(x: npt.NDArray, k: int) -> npt.NDArray:
     middle = np.convolve(
         x,
         np.ones(k) / k,

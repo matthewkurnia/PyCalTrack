@@ -20,6 +20,7 @@ from core.analysis import (
     get_calcium_trace,
     get_parameters,
     photo_bleach_correction,
+    get_mean_beat,
 )
 from core.masking import (
     get_mask_single_cell,
@@ -27,7 +28,8 @@ from core.masking import (
     get_mask_multi_cell_v2,
 )
 from core.reader import get_video_frames, post_read, pre_read
-import config
+from core.flags import AGGRESSIVE_PRUNING
+import cal_track_config
 
 PARAMETER_NAMES = [
     "baseline",
@@ -66,7 +68,7 @@ def _get_paths(path_to_directory: str) -> list[str]:
                 paths.append(os.path.normpath(path.path))
         return paths
     except FileNotFoundError:
-        print(f"Error: {config.videos_directory} does not exist.")
+        print(f"Error: {cal_track_config.videos_directory} does not exist.")
         return []
 
 
@@ -96,7 +98,9 @@ def _get_traces_single_cell(
 ) -> Iterator[Tuple[npt.NDArray, str]]:
     for video_frames, path in videos:
         name = _get_name_from_path(path)
-        analysed_frames = _to_uint16(video_frames[config.beginning_frames_removed :])
+        analysed_frames = _to_uint16(
+            video_frames[cal_track_config.beginning_frames_removed :]
+        )
         try:
             mask = get_mask_single_cell(analysed_frames)
         except:
@@ -114,7 +118,7 @@ def _get_traces_multi_cell(
 ]:
     for video_frames, path in videos:
         name = _get_name_from_path(path)
-        analysed_frames = video_frames[config.beginning_frames_removed :]
+        analysed_frames = video_frames[cal_track_config.beginning_frames_removed :]
         try:
             masks = get_mask_multi_cell(analysed_frames)
         except:
@@ -128,35 +132,37 @@ def _get_traces_multi_cell(
 
 
 def _get_name_from_path(path: str) -> str:
-    if config.videos_directory[-1] == "/" or config.videos_directory[-1] == "\\":
-        return path[len(config.videos_directory) :].replace("/", "-").replace("\\", "-")
-    return path[len(config.videos_directory) + 1 :].replace("/", "-").replace("\\", "-")
-
-
-def _get_mean_beat(
-    trace: npt.NDArray, beat_segments: list[Tuple[int, int]]
-) -> npt.NDArray:
-    min_length = inf
-    for start, end in beat_segments:
-        min_length = min(min_length, end - start)
-    stacked_beats = np.stack(
-        [trace[start : start + min_length] for start, _ in beat_segments]
+    if (
+        cal_track_config.videos_directory[-1] == "/"
+        or cal_track_config.videos_directory[-1] == "\\"
+    ):
+        return (
+            path[len(cal_track_config.videos_directory) :]
+            .replace("/", "-")
+            .replace("\\", "-")
+        )
+    return (
+        path[len(cal_track_config.videos_directory) + 1 :]
+        .replace("/", "-")
+        .replace("\\", "-")
     )
-    mean_beat = np.mean(stacked_beats, axis=0)
-    return mean_beat
 
 
 def main() -> None:
     # Normalise directory.
-    config.videos_directory = os.path.normpath(config.videos_directory)
-    config.trace_path = os.path.normpath(config.trace_path)
+    cal_track_config.videos_directory = os.path.normpath(
+        cal_track_config.videos_directory
+    )
+    cal_track_config.trace_path = os.path.normpath(cal_track_config.trace_path)
 
     # Create results folder.
-    if config.extract_traces:
-        results_path = os.path.join(config.videos_directory, "pycaltrack_analysis")
+    if cal_track_config.extract_traces:
+        results_path = os.path.join(
+            cal_track_config.videos_directory, "pycaltrack_analysis"
+        )
     else:
         results_path = os.path.join(
-            os.path.dirname(config.trace_path), "pycaltrack_analysis"
+            os.path.dirname(cal_track_config.trace_path), "pycaltrack_analysis"
         )
     if not os.path.exists(results_path):
         os.mkdir(results_path)
@@ -169,66 +175,68 @@ def main() -> None:
         elif os.path.isdir(path):
             shutil.rmtree(path)
 
-    if config.save_tau_fittings:
+    if cal_track_config.save_tau_fittings:
         tau_fittings_path = os.path.join(results_path, "tau_fittings")
         os.mkdir(tau_fittings_path)
     else:
         tau_fittings_path = None
 
-    if config.usage == config.Usage.SINGLE_CELL:
+    if cal_track_config.usage == cal_track_config.Usage.SINGLE_CELL:
         single_cell_traces = []
         irregular_traces = []
         failed_parameters_traces = []
         n_success = 0
 
-        if config.extract_traces:
+        if cal_track_config.extract_traces:
             # Get paths to videos.
-            video_paths = _get_paths(config.videos_directory)
+            video_paths = _get_paths(cal_track_config.videos_directory)
             if len(video_paths) == 0:
-                print(f"{config.videos_directory} is empty, aborting.")
+                print(f"{cal_track_config.videos_directory} is empty, aborting.")
                 return
 
             # Get video data.
             videos = _get_videos(video_paths)
             traces = _get_traces_single_cell(videos)
         else:
-            trace_data = pd.read_excel(config.trace_path, sheet_name=None)
+            trace_data = pd.read_excel(cal_track_config.trace_path, sheet_name=None)
             raw_traces = trace_data["Raw Traces"]
             traces = [(raw_traces[name].to_numpy(), name) for name in raw_traces]
 
         for calcium_trace, name in traces:
             beat_segments = beat_segmentation(
                 calcium_trace,
-                config.acquisition_frequency,
-                config.pacing_frequency,
-                config.max_pacing_deviation,
+                cal_track_config.acquisition_frequency,
+                cal_track_config.pacing_frequency,
+                cal_track_config.max_pacing_deviation,
+                AGGRESSIVE_PRUNING,
             )
             if beat_segments is not None:
-                if config.apply_photo_bleach_correction:
+                if cal_track_config.apply_photo_bleach_correction:
                     corrected_trace = photo_bleach_correction(
                         calcium_trace,
                         beat_segments,
-                        config.acquisition_frequency,
-                        config.pacing_frequency,
+                        cal_track_config.acquisition_frequency,
+                        cal_track_config.pacing_frequency,
                     )
                     beat_segments_from_corrected_trace = beat_segmentation(
                         corrected_trace,
-                        config.acquisition_frequency,
-                        config.pacing_frequency,
-                        config.max_pacing_deviation,
+                        cal_track_config.acquisition_frequency,
+                        cal_track_config.pacing_frequency,
+                        cal_track_config.max_pacing_deviation,
+                        AGGRESSIVE_PRUNING,
                     )
                     if beat_segments_from_corrected_trace is not None:
                         beat_segments = beat_segments_from_corrected_trace
                 else:
                     corrected_trace = calcium_trace
                 n_success += 1
-                if config.good_snr:
+                if cal_track_config.good_snr:
                     parameters_list = []
                     for start, end in beat_segments:
                         parameters = get_parameters(
                             corrected_trace[start:end],
-                            config.acquisition_frequency,
-                            config.pacing_frequency,
+                            cal_track_config.acquisition_frequency,
+                            cal_track_config.pacing_frequency,
                             tau_fittings_path,
                         )
                         if parameters is None:
@@ -239,11 +247,11 @@ def main() -> None:
                         else:
                             parameters_list.append(parameters)
                 else:
-                    mean_beat = _get_mean_beat(corrected_trace, beat_segments)
+                    mean_beat = get_mean_beat(corrected_trace, beat_segments)
                     parameters = get_parameters(
                         mean_beat,
-                        config.acquisition_frequency,
-                        config.pacing_frequency,
+                        cal_track_config.acquisition_frequency,
+                        cal_track_config.pacing_frequency,
                         tau_fittings_path,
                     )
                     if parameters is None:
@@ -339,7 +347,7 @@ def main() -> None:
                 + os.path.join(results_path, "calcium_traces_failed_parameters.xlsx")
             )
 
-        if config.good_snr:
+        if cal_track_config.good_snr:
             # Save individual beat traces.
             with pd.ExcelWriter(
                 f"{results_path}/individual_beat_traces.xlsx"
@@ -387,7 +395,7 @@ def main() -> None:
         # Save mean beat traces.
         with pd.ExcelWriter(f"{results_path}/mean_beat_traces.xlsx") as excel_writer:
             mean_traces = [
-                _get_mean_beat(corrected_trace, beat_segments)
+                get_mean_beat(corrected_trace, beat_segments)
                 for _, _, corrected_trace, beat_segments, _ in single_cell_traces
                 if beat_segments is not None
             ]
@@ -431,7 +439,7 @@ def main() -> None:
             )
 
         # Plot results.
-        if not config.quiet:
+        if not cal_track_config.quiet:
             fig, big_axes = plt.subplots(nrows=1, ncols=3)
             fig.tight_layout()
             big_axes[0].set_title("Original Trace(s)", fontsize=16, pad=48)
@@ -473,18 +481,18 @@ def main() -> None:
         irregular_traces = []
         failed_parameters_traces = []
 
-        if config.extract_traces:
+        if cal_track_config.extract_traces:
             # Get paths to videos.
-            video_paths = _get_paths(config.videos_directory)
+            video_paths = _get_paths(cal_track_config.videos_directory)
             if len(video_paths) == 0:
-                print(f"{config.videos_directory} is empty, aborting.")
+                print(f"{cal_track_config.videos_directory} is empty, aborting.")
                 return
 
             # Get video data.
             videos = _get_videos(video_paths)
             traces = _get_traces_multi_cell(videos)
         else:
-            trace_data = pd.read_excel(config.trace_path, sheet_name=None)
+            trace_data = pd.read_excel(cal_track_config.trace_path, sheet_name=None)
             print("Extracting multi-cell data from excel is currently unsupported.")
             return
 
@@ -493,17 +501,18 @@ def main() -> None:
             for i, (calcium_trace, mask, centre) in enumerate(data):
                 beat_segments = beat_segmentation(
                     calcium_trace,
-                    config.acquisition_frequency,
-                    config.pacing_frequency,
-                    config.max_pacing_deviation,
+                    cal_track_config.acquisition_frequency,
+                    cal_track_config.pacing_frequency,
+                    cal_track_config.max_pacing_deviation,
+                    AGGRESSIVE_PRUNING,
                 )
                 if beat_segments is not None:
-                    if config.apply_photo_bleach_correction:
+                    if cal_track_config.apply_photo_bleach_correction:
                         corrected_trace = photo_bleach_correction(
                             calcium_trace,
                             beat_segments,
-                            config.acquisition_frequency,
-                            config.pacing_frequency,
+                            cal_track_config.acquisition_frequency,
+                            cal_track_config.pacing_frequency,
                         )
                         #### EXPERIMENTAL
                         # trend_1 = lambda x: 0.00004 * x
@@ -574,19 +583,20 @@ def main() -> None:
                         #### EXPERIMENTAL
                         beat_segments_from_corrected_trace = beat_segmentation(
                             corrected_trace,
-                            config.acquisition_frequency,
-                            config.pacing_frequency,
-                            config.max_pacing_deviation,
+                            cal_track_config.acquisition_frequency,
+                            cal_track_config.pacing_frequency,
+                            cal_track_config.max_pacing_deviation,
+                            AGGRESSIVE_PRUNING,
                         )
                         if beat_segments_from_corrected_trace is not None:
                             beat_segments = beat_segments_from_corrected_trace
                     else:
                         corrected_trace = calcium_trace
-                    mean_beat = _get_mean_beat(corrected_trace, beat_segments)
+                    mean_beat = get_mean_beat(corrected_trace, beat_segments)
                     parameters = get_parameters(
                         mean_beat,
-                        config.acquisition_frequency,
-                        config.pacing_frequency,
+                        cal_track_config.acquisition_frequency,
+                        cal_track_config.pacing_frequency,
                         tau_fittings_path,
                     )
                     if parameters is None:
@@ -704,7 +714,7 @@ def main() -> None:
             )
 
         # Plot results.
-        if not config.quiet:
+        if not cal_track_config.quiet:
             plt_default_hex_codes = plt.rcParams["axes.prop_cycle"].by_key()["color"]
             for mean_frame, name, traces_analysis in multi_cell_traces:
                 plt.figure(f"{name} (masking)")

@@ -1,8 +1,8 @@
 from __future__ import annotations  # Required for windows version to run.
 import itertools
 import os
-import config
-from math import ceil, floor
+import cal_track_config
+from math import ceil, floor, inf
 from typing import Tuple, Union
 from matplotlib import pyplot as plt
 
@@ -18,12 +18,13 @@ from core.flags import (
     LINEAR_TAU_FITTING,
     PRUNE_BAD_TRACES,
     USE_MILLISECOND,
-    AGGRESSIVE_PRUNING,
 )
-from core.utils import moving_average
+from core.utils import moving_mean
 
 
-DIFF_KERNEL_WIDTH = 8 if config.usage == config.Usage.SINGLE_CELL else 10
+DIFF_KERNEL_WIDTH = (
+    8 if cal_track_config.usage == cal_track_config.Usage.SINGLE_CELL else 10
+)
 TRACE_ONSET_DELAY = 0.1
 BASELINE_WINDOW = 0.2
 BASELINE_INCREASE = 0.03
@@ -48,6 +49,7 @@ def beat_segmentation(
     acquisition_frequency: float,
     pacing_frequency: float,
     max_pacing_deviation: float,
+    aggressive_pruning: bool,
 ) -> Union[list[Tuple[int, int]], None]:
     # Handle acquisition frequency > 100.
     calcium_trace_original = calcium_trace
@@ -55,14 +57,14 @@ def beat_segmentation(
     if acquisition_frequency > 100:
         stride = round(acquisition_frequency / 100)
         # The 24 here may need to be replaced to something else.
-        calcium_trace = moving_average(calcium_trace, 24)[::stride]
-        if config.usage == config.Usage.MULTI_CELL:
-            calcium_trace = moving_average(calcium_trace[::stride], 5)
+        calcium_trace = moving_mean(calcium_trace, 24)[::stride]
+        if cal_track_config.usage == cal_track_config.Usage.MULTI_CELL:
+            calcium_trace = moving_mean(calcium_trace[::stride], 5)
         acquisition_frequency = acquisition_frequency / stride
     else:
         stride = 1
-        if config.usage == config.Usage.MULTI_CELL:
-            calcium_trace = moving_average(calcium_trace, 5)
+        if cal_track_config.usage == cal_track_config.Usage.MULTI_CELL:
+            calcium_trace = moving_mean(calcium_trace, 5)
 
     pacing_period = 1 / pacing_frequency
     cutoff_lower_bound = pacing_period * (1 - max_pacing_deviation)
@@ -73,7 +75,7 @@ def beat_segmentation(
 
     # Get the approximate slope of the trace.
     diff = np.diff(calcium_trace)
-    diff_smoothed = moving_average(diff, DIFF_KERNEL_WIDTH)
+    diff_smoothed = moving_mean(diff, DIFF_KERNEL_WIDTH)
 
     # Find the peaks of the slope.
     # That is, when the most change occurs in the trace.
@@ -106,7 +108,7 @@ def beat_segmentation(
         # Trace too flat, unable to detect any peaks in gradient.
         print("Flat trace detected, skipping.")
         return None
-    elif AGGRESSIVE_PRUNING:
+    elif aggressive_pruning:
         prominences, *_ = peak_prominences(calcium_trace, trace_peak_indices)
         if min(prominences) / max(prominences) < 0.5:
             print(
@@ -197,6 +199,19 @@ def beat_segmentation(
 
     # returns single_traces, skipped, extra_beat, errors
     return beat_segments
+
+
+def get_mean_beat(
+    trace: npt.NDArray, beat_segments: list[Tuple[int, int]]
+) -> npt.NDArray:
+    min_length = inf
+    for start, end in beat_segments:
+        min_length = min(min_length, end - start)
+    stacked_beats = np.stack(
+        [trace[start : start + min_length] for start, _ in beat_segments]
+    )
+    mean_beat = np.mean(stacked_beats, axis=0)
+    return mean_beat
 
 
 def photo_bleach_correction(
