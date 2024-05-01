@@ -32,6 +32,22 @@ increasing_integers = itertools.count()
 
 
 def get_calcium_trace(frames: npt.NDArray, mask: npt.NDArray) -> npt.NDArray:
+    """
+    Extract the calcium trace from given video frames and mask.
+
+    Parameters
+    ----------
+    frames : npt.NDArray
+        The source video frames.
+    mask : npt.NDArray
+        A 2-dimensional mask to use for extracting calcium traces.
+
+    Returns
+    -------
+    npt.NDArray
+        The extracted calcium trace.
+
+    """
     return np.mean(frames[:, mask], axis=1).astype(np.float64)
 
 
@@ -51,6 +67,30 @@ def beat_segmentation(
     max_pacing_deviation: float,
     aggressive_pruning: bool,
 ) -> Union[list[Tuple[int, int]], None]:
+    """
+    Split a calcium trace into individual segments.
+
+    Parameters
+    ----------
+
+    calcium_trace : npt.NDArray
+        A 1-dimensional numpy array to segment.
+    acquisition_frequency : float
+        The acquisition frequency in frames per second of the source video.
+    pacing_frequency : float
+        The pacing frequency of the cells in the video in hz.
+    max_pacing_deviation : float
+        How much the length of a beat segment is allowed to deviate from the ideal beat period.
+    aggressive_pruning : bool
+        If true, traces that do not have the expected number of beats are ignored.
+
+    Returns
+    -------
+    list[Tuple[int, int]] | None
+        If successful, returns a list of (start, end) pairs corresponding to the starting and ending indices of beat segments. Returns None otherwise.
+
+    """
+
     # Handle acquisition frequency > 100.
     calcium_trace_original = calcium_trace
     acquisition_frequency_original = acquisition_frequency
@@ -204,6 +244,23 @@ def beat_segmentation(
 def get_mean_beat(
     trace: npt.NDArray, beat_segments: list[Tuple[int, int]]
 ) -> npt.NDArray:
+    """
+    Computes the averaged beat trace.
+
+    Parameters
+    ----------
+
+    trace : npt.NDArray
+        A 1-dimensional trace.
+    beat_segments: list[Tuple[int, int]]
+        A list of (start, end) pairs corresponding to the starting and ending indices of beat segments.
+
+    Returns
+    -------
+    npt.NDArray
+        A 1-dimensional numpy array of the averaged beat trace.
+
+    """
     min_length = inf
     for start, end in beat_segments:
         min_length = min(min_length, end - start)
@@ -220,7 +277,28 @@ def photo_bleach_correction(
     acquisition_frequency: float,
     pacing_frequency: float,
 ) -> npt.NDArray:
-    # TODO: Rename variables to something more sensible.
+    """
+    Corrects polynomial baseline drift in traces.
+
+    Parameters
+    ----------
+
+    calcium_trace : npt.NDArray
+        A 1-dimensional numpy array to correct.
+    beat_segments: list[Tuple[int, int]]
+        A list of (start, end) pairs corresponding to the starting and ending indices of beat segments.
+    acquisition_frequency : float
+        The acquisition frequency in frames per second of the source video.
+    pacing_frequency : float
+        The pacing frequency of the cells in the video in hz.
+
+    Returns
+    -------
+    npt.NDArray
+        A 1-dimensional numpy array of the corrected trace.
+
+    """
+
     pacing_period = 1 / pacing_frequency
     baseline_duration = ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency)
 
@@ -269,6 +347,28 @@ def get_parameters(
     pacing_frequency: float,
     tau_fittings_path: Union[str, None] = None,
 ) -> Union[list[float], None]:
+    """
+    Corrects polynomial baseline drift in traces.
+
+    Parameters
+    ----------
+
+    trace : npt.NDArray
+        A 1-dimensional numpy array consisting of one transient.
+    acquisition_frequency : float
+        The acquisition frequency in frames per second of the source video.
+    pacing_frequency : float
+        The pacing frequency of the cells in the video in hz.
+    tau_fittings_path: str | None
+        A path to save plots of tau fittings to. If not given, then tau fitting plots will not be saved in disk.
+
+    Returns
+    -------
+    list[float] | None
+        A list of fitted parameters are returned when successful, None otherwise. The list of parameters in order is the following: baseline, peak/baseline, duration, duration_90, duration_50, duration_10, t_start, t_end, t_attack, t_attack_10, t_attack_50, t_attack_90, t_decay, t_decay_10, t_decay_50, t_decay_90, tau, a, c, r_squared, snr.
+
+    """
+
     pacing_period = 1 / pacing_frequency
     acquisition_period = 1 / acquisition_frequency
     baseline_duration = ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency)

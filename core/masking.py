@@ -8,6 +8,22 @@ import numpy.typing as npt
 
 
 def get_mask_single_cell(frames: npt.NDArray[np.uint16]) -> npt.NDArray:
+    """
+    Computes the mask from a single-cell video.
+
+    Parameters
+    ----------
+
+    frames : npt.NDArray
+        A 3-dimensional numpy array consisting of greyscale frames.
+
+    Returns
+    -------
+    npt.NDArray
+        A 2-dimensional boolean numpy array denoting the mask.
+
+    """
+
     n_frames, height, width = frames.shape
 
     stacked_frames = frames.reshape(height * n_frames, width)
@@ -88,6 +104,22 @@ def _get_kernel_size(sigma: float) -> Tuple[int, int]:
 def get_mask_multi_cell(
     frames: npt.NDArray,
 ) -> list[Tuple[npt.NDArray, Tuple[float, float]]]:
+    """
+    Computes the mask from a multi-cell video.
+
+    Parameters
+    ----------
+
+    frames : npt.NDArray
+        A 3-dimensional numpy array consisting of greyscale frames.
+
+    Returns
+    -------
+    list[Tuple[npt.NDArray, Tuple[float, float]]]
+        A list of (mask, centre) pairs for every detected cell, where mask is a 2-dimensional boolean numpy array, and centre is the (x, y) coordinate of the centre of the cell.
+
+    """
+
     # We rescale the values here, so the datatype of frames does not matter.
     average_frame = np.mean(frames, axis=0)
     average_frame_rescaled = np.interp(

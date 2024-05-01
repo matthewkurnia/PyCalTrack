@@ -1,4 +1,4 @@
-from __future__ import annotations # Required for windows version to run.
+from __future__ import annotations  # Required for windows version to run.
 import pathlib
 from typing import Union
 
@@ -11,10 +11,16 @@ import numpy.typing as npt
 
 
 def pre_read() -> None:
+    """
+    Should be called before reading any image stacks/videos.
+    """
     javabridge.start_vm(class_path=bf.JARS)
 
 
 def post_read() -> None:
+    """
+    Should be called after reading any image stacks/videos.
+    """
     javabridge.kill_vm()
 
 
