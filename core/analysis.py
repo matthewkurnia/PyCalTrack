@@ -11,6 +11,7 @@ import numpy.typing as npt
 from scipy.signal import find_peaks, peak_prominences
 from scipy.optimize import curve_fit
 from core.flags import (
+    COMPREHENSIVE_CORRECTION,
     EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
     HANDLE_LAST_TRANSIENT,
     IGNORE_INITIAL_DECAY,
@@ -301,12 +302,18 @@ def photo_bleach_correction(
 
     pacing_period = 1 / pacing_frequency
     baseline_duration = ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency)
+    offset = floor(TRACE_ONSET_DELAY * pacing_period * acquisition_frequency)
 
     xs = np.empty((0,))
     ys = np.empty((0,))
 
     for start, end in beat_segments:
         segmented_beat = calcium_trace[start:end]
+
+        if COMPREHENSIVE_CORRECTION:
+            xs = np.append(xs, np.arange(start, end)[:offset])
+            ys = np.append(ys, segmented_beat[:offset])
+
         peak = np.max(segmented_beat)
         baseline = np.mean(segmented_beat[-baseline_duration:])
         magnitude = peak - baseline
@@ -371,7 +378,9 @@ def get_parameters(
 
     pacing_period = 1 / pacing_frequency
     acquisition_period = 1 / acquisition_frequency
-    baseline_duration = ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency)
+    baseline_duration = (
+        ceil(BASELINE_WINDOW * pacing_period * acquisition_frequency) + 1
+    )
 
     baseline = np.mean(trace[-baseline_duration:]).item()
     peak_location = np.argmax(trace)

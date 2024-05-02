@@ -2,6 +2,9 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colormaps
+from core import flags
+
+print(flags.AGGRESSIVE_PRUNING)
 
 IMAGE_PATH = "./Screenshot 2023-11-16 164714.png"
 

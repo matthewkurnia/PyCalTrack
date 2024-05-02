@@ -30,6 +30,7 @@ from core.masking import (
 from core.reader import get_video_frames, post_read, pre_read
 from core.flags import AGGRESSIVE_PRUNING
 import cal_track_config
+from core.utils import to_uint16
 
 PARAMETER_NAMES = [
     "baseline",
@@ -72,17 +73,6 @@ def _get_paths(path_to_directory: str) -> list[str]:
         return []
 
 
-def _to_uint16(arr: npt.NDArray) -> npt.NDArray[np.uint16]:
-    if arr.dtype == "uint16":
-        return arr
-    if arr.dtype == "uint8":
-        # To satisfy type checker.
-        return (arr.astype(np.uint16) << 8).astype(np.uint16)
-    if arr.dtype == "float32" or arr.dtype == "float64":
-        return (arr * 65535).astype(np.uint16)
-    raise Exception(f"I can't work with this datatype: {arr.dtype}")
-
-
 def _get_videos(paths: list[str]) -> Iterator[Tuple[npt.NDArray, str]]:
     pre_read()
     for path in paths:
@@ -98,7 +88,7 @@ def _get_traces_single_cell(
 ) -> Iterator[Tuple[npt.NDArray, str]]:
     for video_frames, path in videos:
         name = _get_name_from_path(path)
-        analysed_frames = _to_uint16(
+        analysed_frames = to_uint16(
             video_frames[cal_track_config.beginning_frames_removed :]
         )
         try:

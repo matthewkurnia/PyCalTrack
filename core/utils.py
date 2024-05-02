@@ -27,6 +27,18 @@ def moving_mean(x: npt.NDArray, k: int) -> npt.NDArray:
         np.ones(k) / k,
         mode="valid",
     )
-    front = np.array([np.mean(x[:i]) for i in range(k // 2 + 1, k)])
-    back = np.array([np.mean(x[-k + i + 1 :]) for i in range(k // 2)])
+    modulo = k % 2
+    front = np.array([np.mean(x[:i]) for i in range(k // 2 + modulo, k)])
+    back = np.array([np.mean(x[-k + i + 1 :]) for i in range(k // 2 - 1 + modulo)])
     return np.concatenate((front, middle, back), axis=0)
+
+
+def to_uint16(arr: npt.NDArray) -> npt.NDArray[np.uint16]:
+    if arr.dtype == "uint16":
+        return arr
+    if arr.dtype == "uint8":
+        # To satisfy type checker.
+        return (arr.astype(np.uint16) << 8).astype(np.uint16)
+    if arr.dtype == "float32" or arr.dtype == "float64":
+        return (arr * 65535).astype(np.uint16)
+    raise Exception(f"I can't work with this datatype: {arr.dtype}")
