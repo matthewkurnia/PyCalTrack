@@ -13,6 +13,7 @@ from scipy.io import loadmat
 import numpy.typing as npt
 from itertools import zip_longest
 from statistics import mean
+from timeit import default_timer as timer
 
 
 from core.analysis import (
@@ -139,6 +140,8 @@ def _get_name_from_path(path: str) -> str:
 
 
 def main() -> None:
+    start = timer()
+
     # Normalise directory.
     cal_track_config.videos_directory = os.path.normpath(
         cal_track_config.videos_directory
@@ -762,6 +765,9 @@ def main() -> None:
                 plt.tight_layout()
 
                 plt.show()
+
+    end = timer()
+    print(f"Total runtime: {end - start}")
 
     return
 
