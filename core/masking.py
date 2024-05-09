@@ -2,6 +2,7 @@ from __future__ import annotations  # Required for windows version to run.
 from math import ceil
 from typing import Tuple
 import cv2
+from matplotlib import colormaps
 from matplotlib import pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -64,6 +65,7 @@ def get_mask_single_cell(frames: npt.NDArray[np.uint16]) -> npt.NDArray:
     for blob in range(n_blobs):
         if sizes[blob] >= min_size:
             resulting_mask[image_with_separated_blobs == blob + 1] = 255
+
     resulting_mask = cv2.bitwise_not(resulting_mask)
 
     (

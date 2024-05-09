@@ -168,18 +168,21 @@ def main() -> None:
         elif os.path.isdir(path):
             shutil.rmtree(path)
 
+    # Make folder for tau fitting plots if we save them.
     if cal_track_config.save_tau_fittings:
         tau_fittings_path = os.path.join(results_path, "tau_fittings")
         os.mkdir(tau_fittings_path)
     else:
         tau_fittings_path = None
 
+    # Start of the pipeline.
     if cal_track_config.usage == cal_track_config.Usage.SINGLE_CELL:
         single_cell_traces = []
         irregular_traces = []
         failed_parameters_traces = []
         n_success = 0
 
+        # Get calcium traces. Either extract from video or load from excel.
         if cal_track_config.extract_traces:
             # Get paths to videos.
             video_paths = _get_paths(cal_track_config.videos_directory)
@@ -195,6 +198,7 @@ def main() -> None:
             raw_traces = trace_data["Raw Traces"]
             traces = [(raw_traces[name].to_numpy(), name) for name in raw_traces]
 
+        # Analysis on obtained traces.
         for calcium_trace, name in traces:
             beat_segments = beat_segmentation(
                 calcium_trace,
@@ -204,6 +208,7 @@ def main() -> None:
                 AGGRESSIVE_PRUNING,
             )
             if beat_segments is not None:
+                # Correct photobleaching if tasked to do so.
                 if cal_track_config.apply_photo_bleach_correction:
                     corrected_trace = photo_bleach_correction(
                         calcium_trace,
@@ -222,7 +227,10 @@ def main() -> None:
                         beat_segments = beat_segments_from_corrected_trace
                 else:
                     corrected_trace = calcium_trace
+
                 n_success += 1
+
+                # Fit parameters.
                 if cal_track_config.good_snr:
                     parameters_list = []
                     for start, end in beat_segments:
@@ -253,10 +261,12 @@ def main() -> None:
                     else:
                         parameters_list = [parameters]
             else:
+                # Beat segmentation has failed, so the trace is considered irregular.
                 irregular_traces.append((name, calcium_trace))
                 corrected_trace = None
                 parameters_list = None
 
+            # Collect traces and corresponding analysis.
             single_cell_traces.append(
                 (
                     name,
@@ -474,6 +484,7 @@ def main() -> None:
         irregular_traces = []
         failed_parameters_traces = []
 
+        # Get calcium traces. Either extract from video or load from excel.
         if cal_track_config.extract_traces:
             # Get paths to videos.
             video_paths = _get_paths(cal_track_config.videos_directory)
@@ -489,6 +500,7 @@ def main() -> None:
             print("Extracting multi-cell data from excel is currently unsupported.")
             return
 
+        # Analysis on obtained traces.
         for name, mean_frame, data in traces:
             traces_analysis = []
             for i, (calcium_trace, mask, centre) in enumerate(data):
@@ -507,73 +519,6 @@ def main() -> None:
                             cal_track_config.acquisition_frequency,
                             cal_track_config.pacing_frequency,
                         )
-                        #### EXPERIMENTAL
-                        # trend_1 = lambda x: 0.00004 * x
-                        # trend_2 = lambda x: -0.00003 * x
-                        # trend_3 = lambda x: 0.00000024 * x * x
-                        # trend_4 = lambda x: -0.00000036 * x * x
-                        # x_values = np.arange(corrected_trace.size)
-                        # plt.figure("Photo Bleach Correction", figsize=(14, 6))
-                        # plt.plot(
-                        #     calcium_trace + trend_1(x_values),
-                        #     linestyle="dashed",
-                        #     color="red",
-                        # )
-                        # plt.plot(
-                        #     photo_bleach_correction(
-                        #         calcium_trace + trend_1(x_values),
-                        #         beat_segments,
-                        #         config.acquisition_frequency,
-                        #         config.pacing_frequency,
-                        #     ),
-                        #     color="red",
-                        # )
-                        # plt.plot(
-                        #     calcium_trace + trend_2(x_values),
-                        #     linestyle="dashed",
-                        #     color="blue",
-                        # )
-                        # plt.plot(
-                        #     photo_bleach_correction(
-                        #         calcium_trace + trend_2(x_values),
-                        #         beat_segments,
-                        #         config.acquisition_frequency,
-                        #         config.pacing_frequency,
-                        #     ),
-                        #     color="blue",
-                        # )
-                        # plt.plot(
-                        #     calcium_trace + trend_3(x_values),
-                        #     linestyle="dashed",
-                        #     color="green",
-                        # )
-                        # plt.plot(
-                        #     photo_bleach_correction(
-                        #         calcium_trace + trend_3(x_values),
-                        #         beat_segments,
-                        #         config.acquisition_frequency,
-                        #         config.pacing_frequency,
-                        #     ),
-                        #     color="green",
-                        # )
-                        # plt.plot(
-                        #     calcium_trace + trend_4(x_values),
-                        #     linestyle="dashed",
-                        #     color="purple",
-                        # )
-                        # plt.plot(
-                        #     photo_bleach_correction(
-                        #         calcium_trace + trend_4(x_values),
-                        #         beat_segments,
-                        #         config.acquisition_frequency,
-                        #         config.pacing_frequency,
-                        #     ),
-                        #     color="purple",
-                        # )
-                        # plt.ylabel("RGECO Fluorescence (AU)")
-                        # plt.xlabel("Time (ms)")
-                        # plt.show()
-                        #### EXPERIMENTAL
                         beat_segments_from_corrected_trace = beat_segmentation(
                             corrected_trace,
                             cal_track_config.acquisition_frequency,
@@ -598,6 +543,7 @@ def main() -> None:
                         )
                         parameters = FAILED_PARAMETERS
                 else:
+                    # Beat segmentation has failed, so the trace is considered irregular.
                     irregular_traces.append((f"{name}, Cell {i}", calcium_trace))
                     corrected_trace = None
                     mean_beat = None
@@ -613,6 +559,8 @@ def main() -> None:
                         parameters,
                     )
                 )
+
+            # Collect traces and corresponding analysis.
             multi_cell_traces.append(
                 (
                     mean_frame,

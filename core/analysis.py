@@ -11,7 +11,6 @@ import numpy.typing as npt
 from scipy.signal import find_peaks, peak_prominences
 from scipy.optimize import curve_fit
 from core.flags import (
-    COMPREHENSIVE_CORRECTION,
     EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
     HANDLE_LAST_TRANSIENT,
     IGNORE_INITIAL_DECAY,
@@ -233,11 +232,6 @@ def beat_segmentation(
 
     n_period = trace_peak_periods.size
 
-    # get beat rate, which is the number of beats/total time
-    # beat-to-beat distance, average of peaks_period
-    # nperiod, length of peaks_period
-    # original, which is the original trace
-
     # returns single_traces, skipped, extra_beat, errors
     return beat_segments
 
@@ -309,11 +303,6 @@ def photo_bleach_correction(
 
     for start, end in beat_segments:
         segmented_beat = calcium_trace[start:end]
-
-        if COMPREHENSIVE_CORRECTION:
-            xs = np.append(xs, np.arange(start, end)[:offset])
-            ys = np.append(ys, segmented_beat[:offset])
-
         peak = np.max(segmented_beat)
         baseline = np.mean(segmented_beat[-baseline_duration:])
         magnitude = peak - baseline
@@ -506,9 +495,16 @@ def get_parameters(
         tau = 1 / (b * acquisition_frequency)
 
         if tau_fittings_path:
-            plt.figure()
-            plt.plot(trace_decay)
-            plt.plot(exponential(np.arange(trace_decay.size), a, b, c))
+            plt.figure(figsize=(6, 4))
+            plt.plot(trace, label="Calcium Transient")
+            plt.plot(
+                np.arange(trace_decay.size) + peak_location,
+                exponential(np.arange(trace_decay.size), a, b, c),
+                label="Fitted Exponential",
+            )
+            plt.legend()
+            plt.xlabel("Frames")
+            plt.ylabel("Fluorescence (AU)")
             plt.savefig(
                 os.path.join(tau_fittings_path, f"tau_{next(increasing_integers)}.png")
             )

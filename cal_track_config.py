@@ -11,21 +11,11 @@ apply_photo_bleach_correction = True
 beginning_frames_removed = 1
 max_pacing_deviation = 0.1
 good_snr = False
-quiet = False
+quiet = True
 save_tau_fittings = True
 
 extract_traces = True
-# videos_directory = "E:/06-12-2023_PGP1WT-RGECO-aActGFP_PFRPMI_afi_acute/dmso"
-# videos_directory = "D:/30-11-20 ISO WT/0.3um"
-# videos_directory = "sample_videos/multi_cell"
-# videos_directory = "sample_videos/dataset1_RGECO_SingleCell"
-# videos_directory = "sample_videos/killme"
+
 videos_directory = "samples/dataset1_RGECO_SingleCell"
 
-# trace_path = (
-#     "sample_videos/dataset1_RGECO_SingleCell/pycaltrack_analysis/calcium_traces.xlsx"
-# )
-trace_path = (
-    "/home/mkurnia/uni/fyp/PyCalTrack analysis/iso/py/control/calcium_traces.xlsx"
-    # "sample_videos/dataset3_RGECO_MultiCell/pycaltrack_analysis/calcium_traces.xlsx"
-)
+trace_path = "samples/dataset1_RGECO_SingleCell/pycaltrack_analysis/calcium_traces.xlsx"
