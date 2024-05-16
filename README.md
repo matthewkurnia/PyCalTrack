@@ -1,12 +1,16 @@
 # PyCalTrack: An Enhanced Software Solution for High-Throughput Analysis of Calcium Transients in Cardiomyocytes
 
-PyCalTrack is a a Python redesign of [CalTrack](https://github.com/ToepferLab/CalTrack)'s functionality and architecture which aims to be fully free and open-source. PyCalTrack has two pathways for obtaining calcium traces. It can extract them from videos, or it can import them directly from a prior analysis. Extracting traces from videos involves obtaining masks for the cells in the videos. This masking process is different for single-cell and multi-cell videos. After obtaining traces, they are then analysed, generating a set of calcium measurements of biological relevance. Finally, the results of trace extraction and analysis is saved onto disk in the form of Excel files. Each part of this pipeline will be discussed in-depth in this chapter.
-
 ![PyCalTrack's analysis pipeline.](pipeline.png)
+
+PyCalTrack is a a Python redesign of [CalTrack](https://github.com/ToepferLab/CalTrack)'s functionality and architecture which aims to be fully free and open-source. PyCalTrack has two pathways for obtaining calcium traces. It can extract them from videos, or it can import them directly from a prior analysis. Extracting traces from videos involves obtaining masks for the cells in the videos. This masking process is different for single-cell and multi-cell videos. After obtaining traces, they are then analysed, generating a set of calcium measurements of biological relevance. Finally, the results of trace extraction and analysis is saved onto disk in the form of Excel files. Each part of this pipeline will be discussed in-depth in this chapter.
 
 ## Pre-requisites
 
-In order to run PyCalTrack on your system, please make sure that you have [Conda](https://anaconda.org/) installed. We recommend using [miniconda](https://docs.anaconda.com/free/miniconda/index.html), as it is a lighter installation, but any distribution of Anaconda should work just as well. We also recommend installing the [libmamba](https://www.anaconda.com/blog/a-faster-conda-for-a-growing-community) environment solver in order to save time during the setup of the virtual environment.
+In order to run PyCalTrack on your system, please make sure that you have [Conda](https://anaconda.org/) installed. We recommend using [miniconda](https://docs.anaconda.com/free/miniconda/index.html), as it is a lighter installation, but any distribution of Anaconda should work just as well. We also recommend installing the [libmamba](https://www.anaconda.com/blog/a-faster-conda-for-a-growing-community) environment solver in order to save time during the setup of the virtual environment.To test whether you have conda installed or not, use the following command:
+
+```bash
+conda --version
+```
 
 ## Installation
 
@@ -117,4 +121,6 @@ python -m unittest discover tests
 
 ## Common Errors
 
-
+1. `FileNotFoundError: The system cannot find the path specified`: Check if the `videos_directory` and `trace_path` parameters are correct. Also make sure that you are using the correct configuration on `extract_traces`.
+2. Analysis of parameters seem to be empty. Check that the correct acquisition frequency and pacing frequency has been put in.
+3. `ModuleNotFoundError: No module named 'numpy'`: Activate the virtual environment by typing in `conda activate PyCalTrack`.
