@@ -17,11 +17,19 @@ from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
 import cal_track_config
-from core.analysis import (beat_segmentation, get_calcium_trace, get_mean_beat,
-                           get_parameters, photo_bleach_correction)
-from core.flags import AGGRESSIVE_PRUNING
-from core.masking import (get_mask_multi_cell, get_mask_multi_cell_v2,
-                          get_mask_single_cell)
+from core.analysis import (
+    beat_segmentation,
+    get_calcium_trace,
+    get_mean_beat,
+    get_parameters,
+    photo_bleach_correction,
+)
+from core.flags import AGGRESSIVE_PRUNING, LINEAR_TAU_FITTING, IGNORE_INITIAL_DECAY
+from core.masking import (
+    get_mask_multi_cell,
+    get_mask_multi_cell_v2,
+    get_mask_single_cell,
+)
 from core.reader import get_video_frames, post_read, pre_read
 from core.utils import to_uint16
 
@@ -231,6 +239,8 @@ def main() -> None:
                             cal_track_config.acquisition_frequency,
                             cal_track_config.pacing_frequency,
                             tau_fittings_path,
+                            LINEAR_TAU_FITTING,
+                            IGNORE_INITIAL_DECAY,
                         )
                         if parameters is None:
                             failed_parameters_traces.append(

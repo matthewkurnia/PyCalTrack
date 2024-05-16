@@ -9,8 +9,13 @@ import pandas as pd
 from scipy.optimize import curve_fit
 
 import combine_config
-from core.analysis import (beat_segmentation, get_mean_beat, get_parameters,
-                           photo_bleach_correction)
+from core.analysis import (
+    beat_segmentation,
+    get_mean_beat,
+    get_parameters,
+    photo_bleach_correction,
+)
+from core.flags import IGNORE_INITIAL_DECAY, LINEAR_TAU_FITTING
 from core.utils import moving_mean
 
 # def match_beat_segments(
@@ -151,11 +156,15 @@ def main() -> None:
         mean_ca_beat,
         combine_config.acquisition_frequency,
         combine_config.pacing_frequency,
+        linear_tau_fitting=LINEAR_TAU_FITTING,
+        ignore_initial_decay=IGNORE_INITIAL_DECAY,
     )
     contraction_parameters = get_parameters(
         -mean_sarc_beat,
         combine_config.acquisition_frequency,
         combine_config.pacing_frequency,
+        linear_tau_fitting=LINEAR_TAU_FITTING,
+        ignore_initial_decay=IGNORE_INITIAL_DECAY,
     )
     if calcium_parameters is not None and contraction_parameters is not None:
         [_, fmax_f0, *_] = calcium_parameters

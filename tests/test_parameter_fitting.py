@@ -1,24 +1,20 @@
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
-
 from core.analysis import get_parameters
-from core.flags import IGNORE_INITIAL_DECAY, LINEAR_TAU_FITTING
 
 
 class ParameterFittingTest(unittest.TestCase):
     def test_fit_parameters(self):
-        self.assertTrue(
-            not LINEAR_TAU_FITTING and not IGNORE_INITIAL_DECAY,
-            "Please make sure that the flags LINEAR_TAU_FITTING and IGNORE_INITIAL_DECAY are both set to False to match the tau fittings of matlab.",
-        )
-
         trace = (
             pd.read_csv("tests/data/trace_for_fitting.csv", header=None)
             .to_numpy()
             .flatten()
         )
-        py_parameters = get_parameters(trace, 50, 1)
+        py_parameters = get_parameters(
+            trace, 50, 1, linear_tau_fitting=False, ignore_initial_decay=False
+        )
         assert py_parameters is not None
 
         [

@@ -12,10 +12,13 @@ from scipy.optimize import curve_fit
 from scipy.signal import find_peaks, peak_prominences
 
 import cal_track_config
-from core.flags import (EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
-                        HANDLE_LAST_TRANSIENT, IGNORE_INITIAL_DECAY,
-                        INTERPOLATE_INTERCEPT, LINEAR_TAU_FITTING,
-                        PRUNE_BAD_TRACES, USE_MILLISECOND)
+from core.flags import (
+    EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
+    HANDLE_LAST_TRANSIENT,
+    INTERPOLATE_INTERCEPT,
+    PRUNE_BAD_TRACES,
+    USE_MILLISECOND,
+)
 from core.utils import moving_mean
 
 DIFF_KERNEL_WIDTH = (
@@ -338,6 +341,8 @@ def get_parameters(
     acquisition_frequency: float,
     pacing_frequency: float,
     tau_fittings_path: Union[str, None] = None,
+    linear_tau_fitting: bool = False,
+    ignore_initial_decay: bool = False,
 ) -> Union[list[float], None]:
     """
     Corrects polynomial baseline drift in traces.
@@ -463,7 +468,7 @@ def get_parameters(
         return None
 
     try:
-        if IGNORE_INITIAL_DECAY:
+        if ignore_initial_decay:
             cutoff = floor(trace_decay.size * 0.2)
             ys = trace_decay[cutoff:]
         else:
@@ -473,7 +478,7 @@ def get_parameters(
 
         linear = lambda x, a, b: np.log(a) - b * x
         exponential = lambda x, a, b, c: a * np.exp(-b * x) + c
-        if LINEAR_TAU_FITTING:
+        if linear_tau_fitting:
             c = 0.99 * ys.min()
             ys = np.log(ys - c)
             [a, b], *_ = curve_fit(linear, xs, ys, p0=[ys[0] - ys[-1], 0.1])
