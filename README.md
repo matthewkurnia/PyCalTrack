@@ -6,7 +6,7 @@ PyCalTrack is a a Python redesign of [CalTrack](https://github.com/ToepferLab/Ca
 
 ## Pre-requisites
 
-In order to run PyCalTrack on your system, please make sure that you have [Conda](https://anaconda.org/) installed. We recommend using [miniconda](https://docs.anaconda.com/free/miniconda/index.html), as it is a lighter installation, but any distribution of Anaconda should work just as well. We also recommend installing the [libmamba](https://www.anaconda.com/blog/a-faster-conda-for-a-growing-community) environment solver in order to save time during the setup of the virtual environment.To test whether you have conda installed or not, use the following command:
+In order to run PyCalTrack on your system, please make sure that you have [Conda](https://anaconda.org/) installed. We recommend using [miniconda](https://docs.anaconda.com/free/miniconda/index.html), as it is a lighter installation, but any distribution of Anaconda should work just as well. We also recommend installing the [libmamba](https://www.anaconda.com/blog/a-faster-conda-for-a-growing-community) environment solver in order to save time during the setup of the virtual environment.To test whether you have Conda installed or not, use the following command:
 
 ```bash
 conda --version
@@ -37,7 +37,7 @@ If you are on Windows, you can do the same thing by typing in the following comm
 conda env create --file=environment_windows.yml
 ```
 
-Keep in mind that this process may take a few minutes. Once the installation is done, you can activate the python virtual environment by typing in the following command:
+Keep in mind that this process may take a few minutes. Once the installation is done, you can activate the Conda virtual environment by typing in the following command:
 
 ```bash
 conda activate PyCalTrack
