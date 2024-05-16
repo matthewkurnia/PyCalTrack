@@ -1,5 +1,7 @@
 import unittest
+
 import pandas as pd
+
 from core.analysis import beat_segmentation
 
 

@@ -1,7 +1,9 @@
 import unittest
+
 import pandas as pd
+
 from core.analysis import get_parameters
-from core.flags import LINEAR_TAU_FITTING, IGNORE_INITIAL_DECAY
+from core.flags import IGNORE_INITIAL_DECAY, LINEAR_TAU_FITTING
 
 
 class ParameterFittingTest(unittest.TestCase):

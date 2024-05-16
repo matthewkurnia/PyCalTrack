@@ -1,9 +1,11 @@
 import unittest
+
 import numpy as np
 import pandas as pd
-from core.reader import get_video_frames, pre_read, post_read
-from core.masking import get_mask_single_cell, get_mask_multi_cell
+
 from core.analysis import get_calcium_trace
+from core.masking import get_mask_multi_cell, get_mask_single_cell
+from core.reader import get_video_frames, post_read, pre_read
 from core.utils import to_uint16
 
 

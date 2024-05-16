@@ -1,26 +1,22 @@
 from __future__ import annotations  # Required for windows version to run.
+
 import itertools
 import os
-import cal_track_config
 from math import ceil, floor, inf
 from typing import Tuple, Union
-from matplotlib import pyplot as plt
 
 import numpy as np
 import numpy.typing as npt
-from scipy.signal import find_peaks, peak_prominences
+from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
-from core.flags import (
-    EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
-    HANDLE_LAST_TRANSIENT,
-    IGNORE_INITIAL_DECAY,
-    INTERPOLATE_INTERCEPT,
-    LINEAR_TAU_FITTING,
-    PRUNE_BAD_TRACES,
-    USE_MILLISECOND,
-)
-from core.utils import moving_mean
+from scipy.signal import find_peaks, peak_prominences
 
+import cal_track_config
+from core.flags import (EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
+                        HANDLE_LAST_TRANSIENT, IGNORE_INITIAL_DECAY,
+                        INTERPOLATE_INTERCEPT, LINEAR_TAU_FITTING,
+                        PRUNE_BAD_TRACES, USE_MILLISECOND)
+from core.utils import moving_mean
 
 DIFF_KERNEL_WIDTH = (
     8 if cal_track_config.usage == cal_track_config.Usage.SINGLE_CELL else 10
@@ -505,6 +501,27 @@ def get_parameters(
             plt.legend()
             plt.xlabel("Frames")
             plt.ylabel("Fluorescence (AU)")
+
+            x = floor(t_start * acquisition_frequency)
+            y = trace[x]
+            plt.scatter(x, y, color="black", zorder=4)
+            plt.text(x + 1, y + 10, "T0")
+
+            x = floor((t_start + t_attack_50) * acquisition_frequency)
+            y = trace[x]
+            plt.scatter(x, y, color="black", zorder=4)
+            plt.text(x + 1, y + 10, "T50on")
+
+            x = peak_location
+            y = trace[x]
+            plt.scatter(x, y, color="black", zorder=4)
+            plt.text(float(x) + 1, y + 10, "Ton")
+
+            x = peak_location + floor(t_decay_50 * acquisition_frequency)
+            y = trace[x]
+            plt.scatter(x, y, color="black", zorder=4)
+            plt.text(float(x) + 1, y + 10, "T50off")
+
             plt.savefig(
                 os.path.join(tau_fittings_path, f"tau_{next(increasing_integers)}.png")
             )

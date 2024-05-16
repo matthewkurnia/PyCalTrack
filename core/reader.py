@@ -1,4 +1,5 @@
 from __future__ import annotations  # Required for windows version to run.
+
 import pathlib
 from typing import Union
 

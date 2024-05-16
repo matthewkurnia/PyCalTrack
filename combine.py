@@ -1,20 +1,17 @@
-from math import floor, inf
 import os
+from math import floor, inf
 from typing import Tuple, Union
-import numpy as np
-import pandas as pd
-import combine_config
+
 import matplotlib.pyplot as plt
-from core.analysis import (
-    beat_segmentation,
-    get_mean_beat,
-    get_parameters,
-    photo_bleach_correction,
-)
+import numpy as np
 import numpy.typing as npt
-from core.utils import moving_mean
+import pandas as pd
 from scipy.optimize import curve_fit
 
+import combine_config
+from core.analysis import (beat_segmentation, get_mean_beat, get_parameters,
+                           photo_bleach_correction)
+from core.utils import moving_mean
 
 # def match_beat_segments(
 #     calcium_beat_segments: list[Tuple[int, int]],

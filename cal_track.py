@@ -1,36 +1,28 @@
 from __future__ import annotations  # Required for windows version to run.
-from math import ceil, inf, sqrt, isnan
-import shutil
-from typing import Tuple, Iterator
-import numpy as np
-import os
+
 import glob
-from matplotlib import colormaps
-from matplotlib import pyplot as plt
-from matplotlib import colors
-import pandas as pd
-from scipy.io import loadmat
-import numpy.typing as npt
+import os
+import shutil
 from itertools import zip_longest
+from math import ceil, inf, isnan, sqrt
 from statistics import mean
 from timeit import default_timer as timer
+from typing import Iterator, Tuple
 
+import numpy as np
+import numpy.typing as npt
+import pandas as pd
+from matplotlib import colormaps, colors
+from matplotlib import pyplot as plt
+from scipy.io import loadmat
 
-from core.analysis import (
-    beat_segmentation,
-    get_calcium_trace,
-    get_parameters,
-    photo_bleach_correction,
-    get_mean_beat,
-)
-from core.masking import (
-    get_mask_single_cell,
-    get_mask_multi_cell,
-    get_mask_multi_cell_v2,
-)
-from core.reader import get_video_frames, post_read, pre_read
-from core.flags import AGGRESSIVE_PRUNING
 import cal_track_config
+from core.analysis import (beat_segmentation, get_calcium_trace, get_mean_beat,
+                           get_parameters, photo_bleach_correction)
+from core.flags import AGGRESSIVE_PRUNING
+from core.masking import (get_mask_multi_cell, get_mask_multi_cell_v2,
+                          get_mask_single_cell)
+from core.reader import get_video_frames, post_read, pre_read
 from core.utils import to_uint16
 
 PARAMETER_NAMES = [
