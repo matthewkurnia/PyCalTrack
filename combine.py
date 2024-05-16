@@ -9,12 +9,8 @@ import pandas as pd
 from scipy.optimize import curve_fit
 
 import combine_config
-from core.analysis import (
-    beat_segmentation,
-    get_mean_beat,
-    get_parameters,
-    photo_bleach_correction,
-)
+from core.analysis import (beat_segmentation, get_mean_beat, get_parameters,
+                           photo_bleach_correction)
 from core.flags import IGNORE_INITIAL_DECAY, LINEAR_TAU_FITTING
 from core.utils import moving_mean
 

@@ -12,13 +12,9 @@ from scipy.optimize import curve_fit
 from scipy.signal import find_peaks, peak_prominences
 
 import cal_track_config
-from core.flags import (
-    EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
-    HANDLE_LAST_TRANSIENT,
-    INTERPOLATE_INTERCEPT,
-    PRUNE_BAD_TRACES,
-    USE_MILLISECOND,
-)
+from core.flags import (EXPONENTIAL_PHOTO_BLEACH_CORRECTION,
+                        HANDLE_LAST_TRANSIENT, INTERPOLATE_INTERCEPT,
+                        PRUNE_BAD_TRACES, USE_MILLISECOND)
 from core.utils import moving_mean
 
 DIFF_KERNEL_WIDTH = (
